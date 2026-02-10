@@ -9,6 +9,7 @@ import Toast from '@/components/ui/Toast';
 import DailySummary from '@/components/log/DailySummary';
 import { Recipe, FoodLog, EatingOutPreset, DailyNutritionSummary } from '@/types';
 import { MEAL_TYPE_LABELS } from '@/lib/constants';
+import * as storage from '@/lib/storage';
 
 function FoodLogContent() {
   const searchParams = useSearchParams();
@@ -41,6 +42,10 @@ function FoodLogContent() {
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
+    // 初期化
+    if (!storage.isInitialized()) {
+      storage.initializeData();
+    }
     fetchData();
   }, []);
 
@@ -54,29 +59,21 @@ function FoodLogContent() {
     }
   }, [recipeIdFromUrl, recipes]);
 
-  async function fetchData() {
+  function fetchData() {
     setIsLoading(true);
     try {
-      const [logsRes, recipesRes, presetsRes] = await Promise.all([
-        fetch(`/api/food-log?date=${today}`),
-        fetch('/api/recipes'),
-        fetch('/api/eating-out'),
-      ]);
+      // 食事ログ
+      const { logs: foodLogs, summary: foodSummary } = storage.getFoodLogs(today);
+      setLogs(foodLogs);
+      setSummary(foodSummary);
 
-      const logsData = await logsRes.json();
-      const recipesData = await recipesRes.json();
-      const presetsData = await presetsRes.json();
+      // レシピ
+      const allRecipes = storage.getRecipes();
+      setRecipes(allRecipes);
 
-      if (logsData.success) {
-        setLogs(logsData.data);
-        setSummary(logsData.summary);
-      }
-      if (recipesData.success) {
-        setRecipes(recipesData.data);
-      }
-      if (presetsData.success) {
-        setPresets(presetsData.data);
-      }
+      // 外食プリセット
+      const allPresets = storage.getEatingOutPresets();
+      setPresets(allPresets);
     } catch (error) {
       console.error('Fetch error:', error);
     } finally {
@@ -84,49 +81,40 @@ function FoodLogContent() {
     }
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     setIsSaving(true);
     try {
       const portionNum = parseFloat(portion) || 1;
 
-      const body: Record<string, unknown> = {
+      const data: Omit<FoodLog, 'id' | 'created_at'> = {
         logged_date: today,
         meal_type: selectedMealType,
         portion: portionNum,
       };
 
       if (activeTab === 'recipe' && selectedRecipe) {
-        body.recipe_id = selectedRecipe.id;
-        body.calories = (selectedRecipe.calories || 0) * portionNum;
-        body.salt_g = selectedRecipe.salt_g * portionNum;
-        body.carbs_g = (selectedRecipe.carbs_g || 0) * portionNum;
-        body.protein_g = (selectedRecipe.protein_g || 0) * portionNum;
-        body.fiber_g = (selectedRecipe.fiber_g || 0) * portionNum;
+        data.recipe_id = selectedRecipe.id;
+        data.recipe = selectedRecipe;
+        data.calories = (selectedRecipe.calories || 0) * portionNum;
+        data.salt_g = selectedRecipe.salt_g * portionNum;
+        data.carbs_g = (selectedRecipe.carbs_g || 0) * portionNum;
+        data.protein_g = (selectedRecipe.protein_g || 0) * portionNum;
+        data.fiber_g = (selectedRecipe.fiber_g || 0) * portionNum;
       } else if (activeTab === 'preset' && selectedPreset) {
-        body.custom_name = selectedPreset.name;
-        body.calories = (selectedPreset.calories || 0) * portionNum;
-        body.salt_g = (selectedPreset.salt_g || 0) * portionNum;
-        body.carbs_g = (selectedPreset.carbs_g || 0) * portionNum;
-        body.protein_g = (selectedPreset.protein_g || 0) * portionNum;
+        data.custom_name = selectedPreset.name;
+        data.calories = (selectedPreset.calories || 0) * portionNum;
+        data.salt_g = (selectedPreset.salt_g || 0) * portionNum;
+        data.carbs_g = (selectedPreset.carbs_g || 0) * portionNum;
+        data.protein_g = (selectedPreset.protein_g || 0) * portionNum;
       } else if (activeTab === 'custom' && customName) {
-        body.custom_name = customName;
+        data.custom_name = customName;
       }
 
-      const res = await fetch('/api/food-log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        setToast({ message: '記録しました！', type: 'success' });
-        setShowAddModal(false);
-        resetForm();
-        fetchData();
-      } else {
-        setToast({ message: result.error || 'エラーが発生しました', type: 'error' });
-      }
+      storage.addFoodLog(data);
+      setToast({ message: '記録しました！', type: 'success' });
+      setShowAddModal(false);
+      resetForm();
+      fetchData();
     } catch (error) {
       console.error('Save error:', error);
       setToast({ message: 'エラーが発生しました', type: 'error' });
@@ -135,9 +123,9 @@ function FoodLogContent() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => {
     try {
-      await fetch(`/api/food-log?id=${id}`, { method: 'DELETE' });
+      storage.deleteFoodLog(id);
       fetchData();
     } catch (error) {
       console.error('Delete error:', error);

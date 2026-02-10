@@ -6,6 +6,7 @@ import ConditionInput from '@/components/self-care/ConditionInput';
 import Toast from '@/components/ui/Toast';
 import { ConditionLog } from '@/types';
 import { CONDITION_EMOJIS } from '@/lib/constants';
+import * as storage from '@/lib/storage';
 
 export default function ConditionPage() {
   const [todayCondition, setTodayCondition] = useState<ConditionLog | null>(null);
@@ -17,25 +18,30 @@ export default function ConditionPage() {
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
+    if (!storage.isInitialized()) {
+      storage.initializeData();
+    }
     fetchData();
   }, []);
 
-  async function fetchData() {
+  function fetchData() {
     try {
-      const [todayRes, historyRes] = await Promise.all([
-        fetch(`/api/condition?date=${today}`),
-        fetch('/api/condition?limit=14'),
-      ]);
+      // 今日の体調
+      const todayData = storage.getConditionLog(today);
+      setTodayCondition(todayData);
 
-      const todayData = await todayRes.json();
-      const historyData = await historyRes.json();
-
-      if (todayData.success && todayData.data) {
-        setTodayCondition(todayData.data);
+      // 過去14日間の記録を取得
+      const allConditions: ConditionLog[] = [];
+      for (let i = 0; i < 14; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const condition = storage.getConditionLog(dateStr);
+        if (condition) {
+          allConditions.push(condition);
+        }
       }
-      if (historyData.success) {
-        setRecords(historyData.data);
-      }
+      setRecords(allConditions);
     } catch (error) {
       console.error('Fetch error:', error);
     } finally {
@@ -43,7 +49,7 @@ export default function ConditionPage() {
     }
   }
 
-  const handleSubmit = async (data: {
+  const handleSubmit = (data: {
     overall_score: number;
     palpitation: boolean;
     edema: boolean;
@@ -53,22 +59,17 @@ export default function ConditionPage() {
   }) => {
     setIsSaving(true);
     try {
-      const res = await fetch('/api/condition', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          logged_date: today,
-          ...data,
-        }),
+      storage.saveConditionLog({
+        logged_date: today,
+        overall_score: data.overall_score,
+        palpitation: data.palpitation,
+        edema: data.edema,
+        fatigue_level: data.fatigue_level,
+        cpap_used: data.cpap_used,
+        note: data.note,
       });
-
-      const result = await res.json();
-      if (result.success) {
-        setToast({ message: '記録しました！今日もお疲れさまでした', type: 'success' });
-        fetchData();
-      } else {
-        setToast({ message: result.error || 'エラーが発生しました', type: 'error' });
-      }
+      setToast({ message: '記録しました！今日もお疲れさまでした', type: 'success' });
+      fetchData();
     } catch (error) {
       console.error('Save error:', error);
       setToast({ message: 'エラーが発生しました', type: 'error' });

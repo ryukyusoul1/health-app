@@ -6,6 +6,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { Recipe } from '@/types';
 import { CATEGORY_LABELS } from '@/lib/constants';
+import * as storage from '@/lib/storage';
 
 export default function RecipeDetailPage() {
   const params = useParams();
@@ -14,39 +15,22 @@ export default function RecipeDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchRecipe() {
-      try {
-        const res = await fetch(`/api/recipes/${params.id}`);
-        const data = await res.json();
-        if (data.success) {
-          setRecipe(data.data);
-        }
-      } catch (error) {
-        console.error('Fetch error:', error);
-      } finally {
-        setIsLoading(false);
-      }
+    if (!storage.isInitialized()) {
+      storage.initializeData();
     }
 
     if (params.id) {
-      fetchRecipe();
+      const id = Array.isArray(params.id) ? params.id[0] : params.id;
+      const foundRecipe = storage.getRecipeById(id);
+      setRecipe(foundRecipe);
+      setIsLoading(false);
     }
   }, [params.id]);
 
-  const handleFavoriteToggle = async () => {
+  const handleFavoriteToggle = () => {
     if (!recipe) return;
-
-    try {
-      await fetch(`/api/recipes/${recipe.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_favorite: !recipe.is_favorite }),
-      });
-
-      setRecipe(prev => prev ? { ...prev, is_favorite: !prev.is_favorite } : null);
-    } catch (error) {
-      console.error('Favorite toggle error:', error);
-    }
+    storage.toggleRecipeFavorite(recipe.id);
+    setRecipe(prev => prev ? { ...prev, is_favorite: !prev.is_favorite } : null);
   };
 
   const handleAddToLog = () => {
@@ -79,9 +63,9 @@ export default function RecipeDetailPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
-              {CATEGORY_LABELS[recipe.category]}
+              {CATEGORY_LABELS[recipe.category] || recipe.category}
             </span>
-            <span className="text-xs text-gray-500">⏱ {recipe.cooking_time_min}分</span>
+            <span className="text-xs text-gray-500">⏱ {recipe.cook_time_min}分</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-800">{recipe.name}</h1>
         </div>
@@ -118,15 +102,15 @@ export default function RecipeDetailPage() {
             <p className="text-xl font-bold text-gray-700">{recipe.fiber_g || '-'}g</p>
           </div>
           <div className="text-center p-3 bg-gray-50 rounded-xl">
-            <p className="text-xs text-gray-500">カリウム</p>
-            <p className="text-xl font-bold text-gray-700">{recipe.potassium_mg || '-'}mg</p>
+            <p className="text-xs text-gray-500">調理時間</p>
+            <p className="text-xl font-bold text-gray-700">{recipe.cook_time_min || '-'}分</p>
           </div>
         </div>
       </Card>
 
       {/* 材料 */}
       <Card className="mb-4">
-        <h2 className="font-bold text-gray-800 mb-3">材料</h2>
+        <h2 className="font-bold text-gray-800 mb-3">材料（{recipe.servings}人分）</h2>
         <ul className="space-y-2">
           {recipe.ingredients.map((ing, i) => (
             <li key={i} className="flex justify-between text-gray-700 py-1 border-b border-gray-100 last:border-0">
@@ -161,24 +145,6 @@ export default function RecipeDetailPage() {
           </h2>
           <ul className="space-y-1">
             {recipe.salt_tips.map((tip, i) => (
-              <li key={i} className="text-gray-700 text-sm flex items-start gap-1">
-                <span>•</span>
-                <span>{tip}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {/* 血糖値対策のコツ */}
-      {recipe.sugar_tips && recipe.sugar_tips.length > 0 && (
-        <Card className="mb-4 bg-amber-50 border-amber-200">
-          <h2 className="font-bold text-amber-700 mb-2 flex items-center gap-2">
-            <span>🍚</span>
-            血糖値対策のコツ
-          </h2>
-          <ul className="space-y-1">
-            {recipe.sugar_tips.map((tip, i) => (
               <li key={i} className="text-gray-700 text-sm flex items-start gap-1">
                 <span>•</span>
                 <span>{tip}</span>

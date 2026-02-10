@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import Toast from '@/components/ui/Toast';
 import { WeightLog } from '@/types';
 import { USER_PROFILE } from '@/lib/constants';
+import * as storage from '@/lib/storage';
 
 export default function WeightPage() {
   const [records, setRecords] = useState<WeightLog[]>([]);
@@ -15,16 +16,16 @@ export default function WeightPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
+    if (!storage.isInitialized()) {
+      storage.initializeData();
+    }
     fetchRecords();
   }, []);
 
-  async function fetchRecords() {
+  function fetchRecords() {
     try {
-      const res = await fetch('/api/weight?limit=30');
-      const data = await res.json();
-      if (data.success) {
-        setRecords(data.data);
-      }
+      const data = storage.getWeightRecords(30);
+      setRecords(data);
     } catch (error) {
       console.error('Fetch error:', error);
     } finally {
@@ -32,26 +33,20 @@ export default function WeightPage() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!weight) return;
 
     setIsSaving(true);
     try {
-      const res = await fetch('/api/weight', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weight_kg: parseFloat(weight) }),
+      storage.addWeight({
+        weight_kg: parseFloat(weight),
+        logged_at: new Date().toISOString(),
+        measured_at: new Date().toISOString(),
       });
-
-      const result = await res.json();
-      if (result.success) {
-        setToast({ message: '記録しました！', type: 'success' });
-        setWeight('');
-        fetchRecords();
-      } else {
-        setToast({ message: result.error || 'エラーが発生しました', type: 'error' });
-      }
+      setToast({ message: '記録しました！', type: 'success' });
+      setWeight('');
+      fetchRecords();
     } catch (error) {
       console.error('Save error:', error);
       setToast({ message: 'エラーが発生しました', type: 'error' });

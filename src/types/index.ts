@@ -1,19 +1,20 @@
 // 血圧記録
 export interface BloodPressure {
-  id: number;
+  id: string;
   measured_at: string;
   systolic: number;
   diastolic: number;
   pulse?: number;
-  timing: 'morning' | 'evening';
+  timing?: 'morning' | 'evening';
   note?: string;
   created_at: string;
 }
 
 // 体重記録
 export interface WeightLog {
-  id: number;
+  id: string;
   measured_at: string;
+  logged_at: string;
   weight_kg: number;
   created_at: string;
 }
@@ -22,8 +23,9 @@ export interface WeightLog {
 export interface Recipe {
   id: string;
   name: string;
-  category: 'breakfast' | 'prep' | 'dinner_main' | 'dinner_side' | 'soup';
-  cooking_time_min: number;
+  category: string;
+  cook_time_min: number;
+  servings: number;
   calories?: number;
   salt_g: number;
   carbs_g?: number;
@@ -35,14 +37,14 @@ export interface Recipe {
   salt_tips?: string[];
   sugar_tips?: string[];
   is_favorite: boolean;
-  created_at: string;
+  created_at?: string;
 }
 
 // 食事記録
 export interface FoodLog {
   id: number;
   logged_date: string;
-  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  meal_type: string;
   recipe_id?: string;
   recipe?: Recipe;
   custom_name?: string;
@@ -53,18 +55,19 @@ export interface FoodLog {
   protein_g?: number;
   fiber_g?: number;
   note?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 // 外食プリセット
 export interface EatingOutPreset {
   id: string;
   name: string;
+  category?: string;
   calories?: number;
   salt_g?: number;
   carbs_g?: number;
   protein_g?: number;
-  warning?: string;
+  warning?: string | null;
 }
 
 // 週間献立
@@ -79,28 +82,37 @@ export interface MealPlan {
 
 // 体調記録
 export interface ConditionLog {
-  id: number;
+  id: string;
   logged_date: string;
-  overall_score: 1 | 2 | 3 | 4 | 5;
+  overall_score: number;
   palpitation: boolean;
   edema: boolean;
-  fatigue_level: 1 | 2 | 3 | 4 | 5;
+  fatigue_level: number;
   cpap_used: boolean;
   note?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 // 受診記録
 export interface MedicalVisit {
-  id: number;
+  id: string;
   visit_date: string;
-  department?: string;
+  department: string;
   doctor_name?: string;
   diagnosis?: string;
   prescription?: string;
   next_visit?: string;
   note?: string;
-  created_at: string;
+  created_at?: string;
+}
+
+// ミッション
+export interface Mission {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  points: number;
 }
 
 // 日次ミッション

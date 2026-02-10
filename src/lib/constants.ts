@@ -81,11 +81,15 @@ export const CONDITION_EMOJIS: Record<number, string> = {
 
 // カテゴリの日本語名
 export const CATEGORY_LABELS: Record<string, string> = {
+  main: '主菜',
+  side: '副菜',
+  soup: '汁物',
+  rice: 'ごはんもの',
+  snack: '間食・デザート',
   breakfast: '朝食',
   prep: '作り置き',
   dinner_main: '夕食メイン',
   dinner_side: '夕食副菜',
-  soup: '汁物',
 };
 
 // 食事タイプの日本語名

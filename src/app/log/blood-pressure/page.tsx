@@ -5,6 +5,7 @@ import Card from '@/components/ui/Card';
 import BPInput from '@/components/medical/BPInput';
 import Toast from '@/components/ui/Toast';
 import { BloodPressure } from '@/types';
+import * as storage from '@/lib/storage';
 
 export default function BloodPressurePage() {
   const [records, setRecords] = useState<BloodPressure[]>([]);
@@ -13,16 +14,16 @@ export default function BloodPressurePage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
+    if (!storage.isInitialized()) {
+      storage.initializeData();
+    }
     fetchRecords();
   }, []);
 
-  async function fetchRecords() {
+  function fetchRecords() {
     try {
-      const res = await fetch('/api/blood-pressure?limit=30');
-      const data = await res.json();
-      if (data.success) {
-        setRecords(data.data);
-      }
+      const data = storage.getBloodPressureRecords(30);
+      setRecords(data);
     } catch (error) {
       console.error('Fetch error:', error);
     } finally {
@@ -30,7 +31,7 @@ export default function BloodPressurePage() {
     }
   }
 
-  const handleSubmit = async (data: {
+  const handleSubmit = (data: {
     systolic: number;
     diastolic: number;
     pulse?: number;
@@ -38,19 +39,15 @@ export default function BloodPressurePage() {
   }) => {
     setIsSaving(true);
     try {
-      const res = await fetch('/api/blood-pressure', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+      storage.addBloodPressure({
+        systolic: data.systolic,
+        diastolic: data.diastolic,
+        pulse: data.pulse,
+        timing: data.timing,
+        measured_at: new Date().toISOString(),
       });
-
-      const result = await res.json();
-      if (result.success) {
-        setToast({ message: '記録しました！', type: 'success' });
-        fetchRecords();
-      } else {
-        setToast({ message: result.error || 'エラーが発生しました', type: 'error' });
-      }
+      setToast({ message: '記録しました！', type: 'success' });
+      fetchRecords();
     } catch (error) {
       console.error('Save error:', error);
       setToast({ message: 'エラーが発生しました', type: 'error' });

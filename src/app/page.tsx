@@ -8,10 +8,10 @@ import MissionCard from '@/components/self-care/MissionCard';
 import { CONDITION_EMOJIS, WEEKDAYS } from '@/lib/constants';
 import { BloodPressure, WeightLog, DailyNutritionSummary, ConditionLog, Recipe } from '@/types';
 import Link from 'next/link';
+import * as storage from '@/lib/storage';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
   const [latestBP, setLatestBP] = useState<BloodPressure | null>(null);
   const [latestWeight, setLatestWeight] = useState<WeightLog | null>(null);
   const [nutritionSummary, setNutritionSummary] = useState<DailyNutritionSummary>({
@@ -23,125 +23,89 @@ export default function Home() {
     fiber_g: 0,
   });
   const [todayCondition, setTodayCondition] = useState<ConditionLog | null>(null);
-  const [mission, setMission] = useState<{ mission_text: string; completed: boolean } | null>(null);
-  const [streak, setStreak] = useState<{ current_count: number; best_count: number } | null>(null);
+  const [missions, setMissions] = useState<{ mission: { id: string; title: string; points: number }; completed: boolean }[]>([]);
+  const [streak, setStreak] = useState(0);
   const [todayMeals, setTodayMeals] = useState<Recipe[]>([]);
   const [hasVisited, setHasVisited] = useState(false);
 
   const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
   const dateStr = `${today.getMonth() + 1}月${today.getDate()}日（${WEEKDAYS[today.getDay()]}）`;
 
-  // データベースを初期化
+  // 初期化とデータ取得
   useEffect(() => {
-    async function initDb() {
-      try {
-        // データベースの状態を確認
-        const checkRes = await fetch('/api/db/init');
-        const checkData = await checkRes.json();
-
-        if (!checkData.success || checkData.recipeCount === 0) {
-          // 初期化が必要
-          await fetch('/api/db/init', { method: 'POST' });
-        }
-
-        setIsInitialized(true);
-      } catch (error) {
-        console.error('DB init error:', error);
-        setIsInitialized(true); // エラーでも続行
-      }
+    // データを初期化
+    if (!storage.isInitialized()) {
+      storage.initializeData();
     }
-    initDb();
+
+    // データを取得
+    loadData();
   }, []);
 
-  // データを取得
-  useEffect(() => {
-    if (!isInitialized) return;
-
-    async function fetchData() {
-      setIsLoading(true);
-      try {
-        const todayStr = new Date().toISOString().split('T')[0];
-
-        // 並列でデータを取得
-        const [bpRes, weightRes, foodRes, conditionRes, missionRes, visitsRes, recipesRes] = await Promise.all([
-          fetch('/api/blood-pressure?limit=1'),
-          fetch('/api/weight?limit=1'),
-          fetch(`/api/food-log?date=${todayStr}`),
-          fetch(`/api/condition?date=${todayStr}`),
-          fetch('/api/missions'),
-          fetch('/api/medical-visits'),
-          fetch('/api/recipes?limit=3'),
-        ]);
-
-        const bpData = await bpRes.json();
-        const weightData = await weightRes.json();
-        const foodData = await foodRes.json();
-        const conditionData = await conditionRes.json();
-        const missionData = await missionRes.json();
-        const visitsData = await visitsRes.json();
-        const recipesData = await recipesRes.json();
-
-        if (bpData.success && bpData.data.length > 0) {
-          setLatestBP(bpData.data[0]);
-        }
-
-        if (weightData.success && weightData.data.length > 0) {
-          setLatestWeight(weightData.data[0]);
-        }
-
-        if (foodData.success) {
-          setNutritionSummary(foodData.summary);
-        }
-
-        if (conditionData.success && conditionData.data) {
-          setTodayCondition(conditionData.data);
-        }
-
-        if (missionData.success) {
-          setMission(missionData.data);
-          setStreak(missionData.streak);
-        }
-
-        if (visitsData.success && visitsData.data.length > 0) {
-          setHasVisited(true);
-        }
-
-        if (recipesData.success) {
-          setTodayMeals(recipesData.data.slice(0, 3));
-        }
-      } catch (error) {
-        console.error('Fetch error:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchData();
-  }, [isInitialized]);
-
-  const handleMissionComplete = async (completed: boolean) => {
+  function loadData() {
+    setIsLoading(true);
     try {
-      const res = await fetch('/api/missions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ completed }),
-      });
-
-      if (res.ok) {
-        setMission(prev => prev ? { ...prev, completed } : null);
-        if (completed && streak) {
-          setStreak(prev => prev ? {
-            ...prev,
-            current_count: prev.current_count + 1,
-          } : null);
-        }
+      // 血圧
+      const bpRecords = storage.getBloodPressureRecords(1);
+      if (bpRecords.length > 0) {
+        setLatestBP(bpRecords[0]);
       }
+
+      // 体重
+      const weightRecords = storage.getWeightRecords(1);
+      if (weightRecords.length > 0) {
+        setLatestWeight(weightRecords[0]);
+      }
+
+      // 食事
+      const { summary } = storage.getFoodLogs(todayStr);
+      setNutritionSummary(summary);
+
+      // 体調
+      const condition = storage.getConditionLog(todayStr);
+      setTodayCondition(condition);
+
+      // ミッション
+      const userMissions = storage.getUserMissions(todayStr);
+      setMissions(userMissions.slice(0, 3));
+
+      // 連続記録
+      setStreak(storage.getStreakDays());
+
+      // 通院記録
+      const visits = storage.getMedicalVisits();
+      setHasVisited(visits.length > 0);
+
+      // おすすめレシピ
+      const recipes = storage.getRecipes({ limit: 3 });
+      setTodayMeals(recipes);
     } catch (error) {
-      console.error('Mission update error:', error);
+      console.error('Load error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  const handleMissionComplete = (missionId: string, completed: boolean) => {
+    storage.toggleMissionComplete(missionId, todayStr);
+    setMissions(prev =>
+      prev.map(m =>
+        m.mission.id === missionId ? { ...m, completed } : m
+      )
+    );
+    if (completed) {
+      setStreak(prev => prev + 1);
     }
   };
 
-  if (isLoading || !isInitialized) {
+  // 最初のミッションを表示用に変換
+  const firstMission = missions.length > 0 ? {
+    mission_text: missions[0].mission.title,
+    completed: missions[0].completed,
+  } : null;
+
+  if (isLoading) {
     return (
       <div className="p-4 flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -191,12 +155,12 @@ export default function Home() {
       <DailySummary summary={nutritionSummary} />
 
       {/* 今日のミッション */}
-      {mission && (
+      {firstMission && missions.length > 0 && (
         <div className="mb-4">
           <MissionCard
-            mission={mission}
-            streak={streak || undefined}
-            onComplete={handleMissionComplete}
+            mission={firstMission}
+            streak={{ current_count: streak, best_count: streak }}
+            onComplete={(completed) => handleMissionComplete(missions[0].mission.id, completed)}
           />
         </div>
       )}
@@ -217,7 +181,7 @@ export default function Home() {
               <div>
                 <p className="font-medium text-gray-800">{recipe.name}</p>
                 <p className="text-xs text-gray-500">
-                  🧂 {recipe.salt_g}g ⏱ {recipe.cooking_time_min}分
+                  🧂 {recipe.salt_g}g ⏱ {recipe.cook_time_min}分
                 </p>
               </div>
               <span className="text-gray-400">→</span>

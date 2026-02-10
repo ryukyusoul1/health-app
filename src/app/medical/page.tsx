@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Toast from '@/components/ui/Toast';
 import { MedicalVisit } from '@/types';
+import * as storage from '@/lib/storage';
 
 export default function MedicalPage() {
   const [visits, setVisits] = useState<MedicalVisit[]>([]);
@@ -25,18 +26,21 @@ export default function MedicalPage() {
   const [note, setNote] = useState('');
 
   useEffect(() => {
+    if (!storage.isInitialized()) {
+      storage.initializeData();
+    }
     fetchData();
   }, []);
 
-  async function fetchData() {
+  function fetchData() {
     try {
-      const res = await fetch('/api/medical-visits');
-      const data = await res.json();
+      const data = storage.getMedicalVisits();
+      setVisits(data);
 
-      if (data.success) {
-        setVisits(data.data);
-        setNextVisit(data.nextVisit || null);
-      }
+      // 次回予約を探す
+      const today = new Date().toISOString().split('T')[0];
+      const upcoming = data.find(v => v.next_visit && v.next_visit >= today);
+      setNextVisit(upcoming || null);
     } catch (error) {
       console.error('Fetch error:', error);
     } finally {
@@ -44,34 +48,24 @@ export default function MedicalPage() {
     }
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!visitDate) return;
 
     setIsSaving(true);
     try {
-      const res = await fetch('/api/medical-visits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          visit_date: visitDate,
-          department,
-          doctor_name: doctorName || null,
-          diagnosis: diagnosis || null,
-          prescription: prescription || null,
-          next_visit: nextVisitDate || null,
-          note: note || null,
-        }),
+      storage.addMedicalVisit({
+        visit_date: visitDate,
+        department,
+        doctor_name: doctorName || undefined,
+        diagnosis: diagnosis || undefined,
+        prescription: prescription || undefined,
+        next_visit: nextVisitDate || undefined,
+        note: note || undefined,
       });
-
-      const result = await res.json();
-      if (result.success) {
-        setToast({ message: '受診記録を保存しました！', type: 'success' });
-        setShowAddModal(false);
-        resetForm();
-        fetchData();
-      } else {
-        setToast({ message: result.error || 'エラーが発生しました', type: 'error' });
-      }
+      setToast({ message: '受診記録を保存しました！', type: 'success' });
+      setShowAddModal(false);
+      resetForm();
+      fetchData();
     } catch (error) {
       console.error('Save error:', error);
       setToast({ message: 'エラーが発生しました', type: 'error' });
@@ -122,14 +116,14 @@ export default function MedicalPage() {
       )}
 
       {/* 次回予約 */}
-      {nextVisit && (
+      {nextVisit && nextVisit.next_visit && (
         <Card className="mb-4 bg-primary/5">
           <h2 className="font-bold text-primary mb-2 flex items-center gap-2">
             <span>📅</span>
             次回予約
           </h2>
           <p className="text-xl font-bold text-gray-800">
-            {new Date(nextVisit.next_visit!).toLocaleDateString('ja-JP', {
+            {new Date(nextVisit.next_visit).toLocaleDateString('ja-JP', {
               month: 'long',
               day: 'numeric',
               weekday: 'short',

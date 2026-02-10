@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import RecipeCard from '@/components/meals/RecipeCard';
 import { Recipe } from '@/types';
 import { CATEGORY_LABELS } from '@/lib/constants';
+import * as storage from '@/lib/storage';
 
 export default function MealsPage() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -14,57 +15,44 @@ export default function MealsPage() {
 
   const categories = [
     { key: 'all', label: 'すべて' },
-    { key: 'breakfast', label: '朝食' },
-    { key: 'prep', label: '作り置き' },
-    { key: 'dinner_main', label: '夕食メイン' },
-    { key: 'dinner_side', label: '夕食副菜' },
+    { key: 'main', label: '主菜' },
+    { key: 'side', label: '副菜' },
     { key: 'soup', label: '汁物' },
+    { key: 'rice', label: 'ごはん' },
+    { key: 'snack', label: '間食' },
   ];
 
   useEffect(() => {
-    async function fetchRecipes() {
-      setIsLoading(true);
-      try {
-        let url = '/api/recipes?';
-        if (selectedCategory !== 'all') {
-          url += `category=${selectedCategory}&`;
-        }
-        if (showFavorites) {
-          url += 'favorite=true&';
-        }
-        if (searchQuery) {
-          url += `search=${encodeURIComponent(searchQuery)}`;
-        }
-
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.success) {
-          setRecipes(data.data);
-        }
-      } catch (error) {
-        console.error('Fetch error:', error);
-      } finally {
-        setIsLoading(false);
-      }
+    if (!storage.isInitialized()) {
+      storage.initializeData();
     }
+  }, []);
 
+  useEffect(() => {
     fetchRecipes();
   }, [selectedCategory, showFavorites, searchQuery]);
 
-  const handleFavoriteToggle = async (id: string, isFavorite: boolean) => {
+  function fetchRecipes() {
+    setIsLoading(true);
     try {
-      await fetch(`/api/recipes/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_favorite: isFavorite }),
+      const data = storage.getRecipes({
+        category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        favorite: showFavorites || undefined,
+        search: searchQuery || undefined,
       });
-
-      setRecipes(prev =>
-        prev.map(r => (r.id === id ? { ...r, is_favorite: isFavorite } : r))
-      );
+      setRecipes(data);
     } catch (error) {
-      console.error('Favorite toggle error:', error);
+      console.error('Fetch error:', error);
+    } finally {
+      setIsLoading(false);
     }
+  }
+
+  const handleFavoriteToggle = (id: string) => {
+    storage.toggleRecipeFavorite(id);
+    setRecipes(prev =>
+      prev.map(r => (r.id === id ? { ...r, is_favorite: !r.is_favorite } : r))
+    );
   };
 
   // カテゴリごとにグループ化
@@ -136,7 +124,7 @@ export default function MealsPage() {
         Object.entries(groupedRecipes).map(([category, categoryRecipes]) => (
           <div key={category} className="mb-6">
             <h2 className="text-lg font-bold text-gray-800 mb-3">
-              {CATEGORY_LABELS[category]}
+              {CATEGORY_LABELS[category] || category}
             </h2>
             <div className="space-y-3">
               {categoryRecipes.map((recipe) => (

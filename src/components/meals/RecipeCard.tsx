@@ -33,7 +33,7 @@ export default function RecipeCard({
             <p className="font-medium text-gray-800 truncate">{recipe.name}</p>
             <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
               <span>🧂 {recipe.salt_g}g</span>
-              <span>⏱ {recipe.cooking_time_min}分</span>
+              <span>⏱ {recipe.cook_time_min}分</span>
             </div>
           </div>
           {onFavoriteToggle && (
@@ -58,7 +58,7 @@ export default function RecipeCard({
               <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
                 {CATEGORY_LABELS[recipe.category]}
               </span>
-              <span className="text-xs text-gray-500">⏱ {recipe.cooking_time_min}分</span>
+              <span className="text-xs text-gray-500">⏱ {recipe.cook_time_min}分</span>
             </div>
             <h3 className="font-bold text-gray-800 text-lg">{recipe.name}</h3>
           </div>
