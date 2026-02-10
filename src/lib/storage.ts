@@ -14,6 +14,8 @@ const KEYS = {
   MISSIONS: 'health_missions',
   USER_MISSIONS: 'health_user_missions',
   INITIALIZED: 'health_initialized',
+  CUSTOM_FOODS: 'health_custom_foods',
+  EXERCISE_LOG: 'health_exercise_log',
 };
 
 // 汎用的なlocalStorage操作
@@ -401,4 +403,101 @@ export function initializeData(): void {
   setItem(KEYS.EATING_OUT, eatingOut);
   setItem(KEYS.MISSIONS, missions);
   setItem(KEYS.INITIALIZED, true);
+}
+
+// ==================== カスタム料理 ====================
+export interface CustomFood {
+  id: string;
+  name: string;
+  seasonings: {
+    seasoning_id: string;
+    name: string;
+    amount: number;
+    unit: 'tbsp' | 'tsp';
+    salt_g: number;
+  }[];
+  total_salt_g: number;
+  servings: number;
+  created_at: string;
+}
+
+export function getCustomFoods(): CustomFood[] {
+  return getItem<CustomFood[]>(KEYS.CUSTOM_FOODS, []);
+}
+
+export function addCustomFood(data: Omit<CustomFood, 'id' | 'created_at'>): CustomFood {
+  const records = getItem<CustomFood[]>(KEYS.CUSTOM_FOODS, []);
+  const newRecord: CustomFood = {
+    ...data,
+    id: generateId(),
+    created_at: new Date().toISOString(),
+  };
+  records.push(newRecord);
+  setItem(KEYS.CUSTOM_FOODS, records);
+  return newRecord;
+}
+
+export function deleteCustomFood(id: string): void {
+  const records = getItem<CustomFood[]>(KEYS.CUSTOM_FOODS, []);
+  setItem(KEYS.CUSTOM_FOODS, records.filter(r => r.id !== id));
+}
+
+// ==================== 運動記録 ====================
+export interface ExerciseLog {
+  id: string;
+  logged_date: string;
+  exercise_id: string;
+  exercise_name: string;
+  duration_min: number;
+  calories_burned: number;
+  completed: boolean;
+  note?: string;
+  created_at: string;
+}
+
+export function getExerciseLogs(date?: string): ExerciseLog[] {
+  const records = getItem<ExerciseLog[]>(KEYS.EXERCISE_LOG, []);
+  if (date) {
+    return records.filter(r => r.logged_date === date);
+  }
+  return records.sort((a, b) =>
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
+
+export function addExerciseLog(data: Omit<ExerciseLog, 'id' | 'created_at'>): ExerciseLog {
+  const records = getItem<ExerciseLog[]>(KEYS.EXERCISE_LOG, []);
+  const newRecord: ExerciseLog = {
+    ...data,
+    id: generateId(),
+    created_at: new Date().toISOString(),
+  };
+  records.push(newRecord);
+  setItem(KEYS.EXERCISE_LOG, records);
+  return newRecord;
+}
+
+export function toggleExerciseComplete(id: string): void {
+  const records = getItem<ExerciseLog[]>(KEYS.EXERCISE_LOG, []);
+  const index = records.findIndex(r => r.id === id);
+  if (index >= 0) {
+    records[index].completed = !records[index].completed;
+    setItem(KEYS.EXERCISE_LOG, records);
+  }
+}
+
+export function deleteExerciseLog(id: string): void {
+  const records = getItem<ExerciseLog[]>(KEYS.EXERCISE_LOG, []);
+  setItem(KEYS.EXERCISE_LOG, records.filter(r => r.id !== id));
+}
+
+// 今日の運動サマリー
+export function getTodayExerciseSummary(): { total_duration: number; total_calories: number; completed_count: number } {
+  const today = new Date().toISOString().split('T')[0];
+  const logs = getExerciseLogs(today).filter(l => l.completed);
+  return {
+    total_duration: logs.reduce((sum, l) => sum + l.duration_min, 0),
+    total_calories: logs.reduce((sum, l) => sum + l.calories_burned, 0),
+    completed_count: logs.length,
+  };
 }

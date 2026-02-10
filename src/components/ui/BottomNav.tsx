@@ -8,8 +8,8 @@ const navItems = [
   { href: '/', icon: '🏠', label: 'ホーム' },
   { href: '/meals', icon: '🍱', label: '献立' },
   { href: '/log', icon: '📝', label: '記録' },
-  { href: '/analysis', icon: '📊', label: '分析' },
-  { href: '/settings', icon: '⚙️', label: '設定' },
+  { href: '/exercise', icon: '🏃', label: '運動' },
+  { href: '/trainer', icon: '🤖', label: 'AI相談' },
 ];
 
 export default function BottomNav() {

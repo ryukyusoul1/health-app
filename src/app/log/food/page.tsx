@@ -9,7 +9,17 @@ import Toast from '@/components/ui/Toast';
 import DailySummary from '@/components/log/DailySummary';
 import { Recipe, FoodLog, EatingOutPreset, DailyNutritionSummary } from '@/types';
 import { MEAL_TYPE_LABELS } from '@/lib/constants';
+import { SEASONINGS, calculateSalt, getSeasoningsByCategory } from '@/lib/seasonings';
 import * as storage from '@/lib/storage';
+
+interface SeasoningEntry {
+  id: string;
+  seasoning_id: string;
+  name: string;
+  amount: number;
+  unit: 'tbsp' | 'tsp';
+  salt_g: number;
+}
 
 function FoodLogContent() {
   const searchParams = useSearchParams();
@@ -37,12 +47,16 @@ function FoodLogContent() {
   const [selectedPreset, setSelectedPreset] = useState<EatingOutPreset | null>(null);
   const [customName, setCustomName] = useState('');
   const [portion, setPortion] = useState('1');
-  const [activeTab, setActiveTab] = useState<'recipe' | 'preset' | 'custom'>('recipe');
+  const [activeTab, setActiveTab] = useState<'recipe' | 'preset' | 'homemade' | 'custom'>('recipe');
+
+  // 手作り用の調味料リスト
+  const [seasoningEntries, setSeasoningEntries] = useState<SeasoningEntry[]>([]);
+  const [homemadeName, setHomemadeName] = useState('');
+  const [homemadeServings, setHomemadeServings] = useState('2');
 
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
-    // 初期化
     if (!storage.isInitialized()) {
       storage.initializeData();
     }
@@ -62,16 +76,13 @@ function FoodLogContent() {
   function fetchData() {
     setIsLoading(true);
     try {
-      // 食事ログ
       const { logs: foodLogs, summary: foodSummary } = storage.getFoodLogs(today);
       setLogs(foodLogs);
       setSummary(foodSummary);
 
-      // レシピ
       const allRecipes = storage.getRecipes();
       setRecipes(allRecipes);
 
-      // 外食プリセット
       const allPresets = storage.getEatingOutPresets();
       setPresets(allPresets);
     } catch (error) {
@@ -80,6 +91,47 @@ function FoodLogContent() {
       setIsLoading(false);
     }
   }
+
+  // 調味料を追加
+  const addSeasoning = (seasoningId: string) => {
+    const seasoning = SEASONINGS.find(s => s.id === seasoningId);
+    if (!seasoning) return;
+
+    const salt = calculateSalt(seasoningId, 1, 'tbsp');
+    setSeasoningEntries([...seasoningEntries, {
+      id: Date.now().toString(),
+      seasoning_id: seasoningId,
+      name: seasoning.name,
+      amount: 1,
+      unit: 'tbsp',
+      salt_g: salt,
+    }]);
+  };
+
+  // 調味料の量を変更
+  const updateSeasoningAmount = (id: string, amount: number, unit: 'tbsp' | 'tsp') => {
+    setSeasoningEntries(entries =>
+      entries.map(e => {
+        if (e.id === id) {
+          const salt = calculateSalt(e.seasoning_id, amount, unit);
+          return { ...e, amount, unit, salt_g: salt };
+        }
+        return e;
+      })
+    );
+  };
+
+  // 調味料を削除
+  const removeSeasoning = (id: string) => {
+    setSeasoningEntries(entries => entries.filter(e => e.id !== id));
+  };
+
+  // 手作り料理の合計塩分を計算
+  const getTotalSalt = () => {
+    const total = seasoningEntries.reduce((sum, e) => sum + e.salt_g, 0);
+    const servings = parseInt(homemadeServings) || 1;
+    return total / servings;
+  };
 
   const handleSubmit = () => {
     setIsSaving(true);
@@ -106,6 +158,19 @@ function FoodLogContent() {
         data.salt_g = (selectedPreset.salt_g || 0) * portionNum;
         data.carbs_g = (selectedPreset.carbs_g || 0) * portionNum;
         data.protein_g = (selectedPreset.protein_g || 0) * portionNum;
+      } else if (activeTab === 'homemade' && homemadeName && seasoningEntries.length > 0) {
+        // 手作り料理
+        const saltPerServing = getTotalSalt();
+        data.custom_name = homemadeName;
+        data.salt_g = saltPerServing * portionNum;
+
+        // カスタム料理として保存
+        storage.addCustomFood({
+          name: homemadeName,
+          seasonings: seasoningEntries,
+          total_salt_g: seasoningEntries.reduce((sum, e) => sum + e.salt_g, 0),
+          servings: parseInt(homemadeServings) || 1,
+        });
       } else if (activeTab === 'custom' && customName) {
         data.custom_name = customName;
       }
@@ -136,11 +201,15 @@ function FoodLogContent() {
     setSelectedRecipe(null);
     setSelectedPreset(null);
     setCustomName('');
+    setHomemadeName('');
+    setSeasoningEntries([]);
+    setHomemadeServings('2');
     setPortion('1');
     setActiveTab('recipe');
   };
 
   const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
+  const seasoningsByCategory = getSeasoningsByCategory();
 
   return (
     <div className="p-4">
@@ -149,10 +218,8 @@ function FoodLogContent() {
         <p className="text-gray-600">{new Date().toLocaleDateString('ja-JP')}</p>
       </header>
 
-      {/* 栄養サマリー */}
       <DailySummary summary={summary} />
 
-      {/* 今日の記録 */}
       <Card className="mb-4">
         <h2 className="font-bold text-gray-800 mb-3">今日の食事</h2>
         {isLoading ? (
@@ -164,14 +231,9 @@ function FoodLogContent() {
         ) : (
           <div className="space-y-2">
             {logs.map((log) => (
-              <div
-                key={log.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
-              >
+              <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                 <div>
-                  <p className="text-xs text-gray-500">
-                    {MEAL_TYPE_LABELS[log.meal_type]}
-                  </p>
+                  <p className="text-xs text-gray-500">{MEAL_TYPE_LABELS[log.meal_type]}</p>
                   <p className="font-medium text-gray-800">
                     {log.recipe?.name || log.custom_name || '食事'}
                     {log.portion !== 1 && ` ×${log.portion}`}
@@ -181,10 +243,7 @@ function FoodLogContent() {
                     {log.calories && ` ${log.calories}kcal`}
                   </p>
                 </div>
-                <button
-                  onClick={() => handleDelete(log.id)}
-                  className="text-red-500 text-sm"
-                >
+                <button onClick={() => handleDelete(log.id)} className="text-red-500 text-sm">
                   削除
                 </button>
               </div>
@@ -193,22 +252,14 @@ function FoodLogContent() {
         )}
       </Card>
 
-      {/* 追加ボタン */}
-      <Button
-        onClick={() => setShowAddModal(true)}
-        fullWidth
-        className="sticky bottom-20"
-      >
+      <Button onClick={() => setShowAddModal(true)} fullWidth className="sticky bottom-20">
         🍽️ 食事を追加
       </Button>
 
       {/* 追加モーダル */}
       <Modal
         isOpen={showAddModal}
-        onClose={() => {
-          setShowAddModal(false);
-          resetForm();
-        }}
+        onClose={() => { setShowAddModal(false); resetForm(); }}
         title="食事を記録"
       >
         {/* 食事タイプ選択 */}
@@ -220,9 +271,7 @@ function FoodLogContent() {
                 key={type}
                 onClick={() => setSelectedMealType(type)}
                 className={`py-2 rounded-xl text-sm font-medium transition-colors ${
-                  selectedMealType === type
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-100 text-gray-600'
+                  selectedMealType === type ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'
                 }`}
               >
                 {MEAL_TYPE_LABELS[type]}
@@ -232,37 +281,18 @@ function FoodLogContent() {
         </div>
 
         {/* タブ切り替え */}
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => setActiveTab('recipe')}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium ${
-              activeTab === 'recipe'
-                ? 'bg-primary/10 text-primary'
-                : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            レシピ
-          </button>
-          <button
-            onClick={() => setActiveTab('preset')}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium ${
-              activeTab === 'preset'
-                ? 'bg-primary/10 text-primary'
-                : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            外食
-          </button>
-          <button
-            onClick={() => setActiveTab('custom')}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium ${
-              activeTab === 'custom'
-                ? 'bg-primary/10 text-primary'
-                : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            その他
-          </button>
+        <div className="flex gap-1 mb-4">
+          {(['recipe', 'homemade', 'preset', 'custom'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2 rounded-xl text-xs font-medium ${
+                activeTab === tab ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {tab === 'recipe' ? 'レシピ' : tab === 'homemade' ? '手作り' : tab === 'preset' ? '外食' : 'その他'}
+            </button>
+          ))}
         </div>
 
         {/* 選択エリア */}
@@ -274,17 +304,106 @@ function FoodLogContent() {
                   key={recipe.id}
                   onClick={() => setSelectedRecipe(recipe)}
                   className={`w-full p-3 text-left rounded-xl transition-colors ${
-                    selectedRecipe?.id === recipe.id
-                      ? 'bg-primary/10 border-2 border-primary'
-                      : 'bg-gray-50 hover:bg-gray-100'
+                    selectedRecipe?.id === recipe.id ? 'bg-primary/10 border-2 border-primary' : 'bg-gray-50'
                   }`}
                 >
                   <p className="font-medium">{recipe.name}</p>
-                  <p className="text-xs text-gray-500">
-                    🧂 {recipe.salt_g}g {recipe.calories}kcal
-                  </p>
+                  <p className="text-xs text-gray-500">🧂 {recipe.salt_g}g {recipe.calories}kcal</p>
                 </button>
               ))}
+            </div>
+          )}
+
+          {activeTab === 'homemade' && (
+            <div className="space-y-4">
+              {/* 料理名 */}
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">料理名</label>
+                <input
+                  type="text"
+                  value={homemadeName}
+                  onChange={(e) => setHomemadeName(e.target.value)}
+                  placeholder="例: 野菜炒め"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200"
+                />
+              </div>
+
+              {/* 何人分か */}
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">何人分？</label>
+                <div className="flex gap-2">
+                  {['1', '2', '3', '4'].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setHomemadeServings(n)}
+                      className={`flex-1 py-2 rounded-xl text-sm ${
+                        homemadeServings === n ? 'bg-primary text-white' : 'bg-gray-100'
+                      }`}
+                    >
+                      {n}人分
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 追加した調味料 */}
+              {seasoningEntries.length > 0 && (
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-medium text-sm">追加した調味料</span>
+                    <span className="text-primary font-bold">
+                      1人分 約{getTotalSalt().toFixed(1)}g
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {seasoningEntries.map((entry) => (
+                      <div key={entry.id} className="flex items-center gap-2 bg-white p-2 rounded-lg">
+                        <span className="flex-1 text-sm">{entry.name}</span>
+                        <select
+                          value={entry.amount}
+                          onChange={(e) => updateSeasoningAmount(entry.id, parseFloat(e.target.value), entry.unit)}
+                          className="w-16 px-2 py-1 text-sm border rounded"
+                        >
+                          {[0.5, 1, 1.5, 2, 2.5, 3].map(n => (
+                            <option key={n} value={n}>{n}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={entry.unit}
+                          onChange={(e) => updateSeasoningAmount(entry.id, entry.amount, e.target.value as 'tbsp' | 'tsp')}
+                          className="w-20 px-2 py-1 text-sm border rounded"
+                        >
+                          <option value="tbsp">大さじ</option>
+                          <option value="tsp">小さじ</option>
+                        </select>
+                        <span className="text-xs text-gray-500 w-12">{entry.salt_g.toFixed(1)}g</span>
+                        <button onClick={() => removeSeasoning(entry.id)} className="text-red-500 text-xs">×</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 調味料を追加 */}
+              <div>
+                <label className="block text-sm text-gray-600 mb-2">調味料を追加（タップで追加）</label>
+                {Object.entries(seasoningsByCategory).map(([category, items]) => (
+                  <div key={category} className="mb-3">
+                    <p className="text-xs text-gray-500 mb-1">{category}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {items.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => addSeasoning(s.id)}
+                          className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg"
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -295,18 +414,12 @@ function FoodLogContent() {
                   key={preset.id}
                   onClick={() => setSelectedPreset(preset)}
                   className={`w-full p-3 text-left rounded-xl transition-colors ${
-                    selectedPreset?.id === preset.id
-                      ? 'bg-amber-50 border-2 border-amber-400'
-                      : 'bg-gray-50 hover:bg-gray-100'
+                    selectedPreset?.id === preset.id ? 'bg-amber-50 border-2 border-amber-400' : 'bg-gray-50'
                   }`}
                 >
                   <p className="font-medium">{preset.name}</p>
-                  <p className="text-xs text-gray-500">
-                    🧂 {preset.salt_g}g {preset.calories}kcal
-                  </p>
-                  {preset.warning && (
-                    <p className="text-xs text-amber-600 mt-1">⚠️ {preset.warning}</p>
-                  )}
+                  <p className="text-xs text-gray-500">🧂 {preset.salt_g}g {preset.calories}kcal</p>
+                  {preset.warning && <p className="text-xs text-amber-600 mt-1">⚠️ {preset.warning}</p>}
                 </button>
               ))}
             </div>
@@ -332,9 +445,7 @@ function FoodLogContent() {
                 key={p}
                 onClick={() => setPortion(p)}
                 className={`flex-1 py-2 rounded-xl text-sm font-medium ${
-                  portion === p
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-100 text-gray-600'
+                  portion === p ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'
                 }`}
               >
                 {p === '1' ? '普通' : `×${p}`}
@@ -350,6 +461,7 @@ function FoodLogContent() {
             isSaving ||
             (activeTab === 'recipe' && !selectedRecipe) ||
             (activeTab === 'preset' && !selectedPreset) ||
+            (activeTab === 'homemade' && (!homemadeName || seasoningEntries.length === 0)) ||
             (activeTab === 'custom' && !customName)
           }
         >
@@ -357,14 +469,7 @@ function FoodLogContent() {
         </Button>
       </Modal>
 
-      {/* トースト */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
