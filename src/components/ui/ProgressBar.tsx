@@ -21,8 +21,8 @@ export default function ProgressBar({
   size = 'md',
   color = 'primary',
 }: ProgressBarProps) {
-  const percentage = Math.min((value / max) * 100, 100);
-  const isOver = value > max;
+  const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  const isOver = max > 0 && value > max;
 
   const sizeStyles = {
     sm: 'h-2',

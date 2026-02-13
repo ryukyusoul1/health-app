@@ -252,7 +252,7 @@ function FoodLogContent() {
         )}
       </Card>
 
-      <Button onClick={() => setShowAddModal(true)} fullWidth className="sticky bottom-20">
+      <Button onClick={() => setShowAddModal(true)} fullWidth>
         🍽️ 食事を追加
       </Button>
 
@@ -296,7 +296,7 @@ function FoodLogContent() {
         </div>
 
         {/* 選択エリア */}
-        <div className="max-h-60 overflow-y-auto mb-4">
+        <div className="mb-4">
           {activeTab === 'recipe' && (
             <div className="space-y-2">
               {recipes.map((recipe) => (

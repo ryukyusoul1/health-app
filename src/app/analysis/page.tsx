@@ -88,16 +88,17 @@ export default function AnalysisPage() {
             {/* 簡易グラフ */}
             <div className="h-40 flex items-end gap-1 overflow-x-auto">
               {bpRecords.slice(-14).map((record, i) => {
-                const height = ((record.systolic - 80) / 100) * 100;
+                const sysHeight = Math.max(((record.systolic - 80) / 100) * 100, 10);
+                const diaHeight = Math.max(((record.diastolic - 40) / (record.systolic - 40 || 1)) * 100, 5);
                 return (
                   <div
                     key={i}
                     className="flex-1 min-w-4 bg-primary/20 rounded-t relative"
-                    style={{ height: `${Math.max(height, 10)}%` }}
+                    style={{ height: `${Math.min(sysHeight, 100)}%` }}
                   >
                     <div
                       className="absolute bottom-0 left-0 right-0 bg-primary rounded-t"
-                      style={{ height: `${((record.diastolic - 80) / 100) * 100}%` }}
+                      style={{ height: `${Math.min(diaHeight, 100)}%` }}
                     />
                   </div>
                 );

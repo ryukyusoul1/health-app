@@ -155,7 +155,7 @@ export default function RecipeDetailPage() {
       )}
 
       {/* アクションボタン */}
-      <div className="sticky bottom-20 bg-background pt-4">
+      <div className="pt-4 mb-4">
         <Button onClick={handleAddToLog} fullWidth>
           🍽️ 食事として記録する
         </Button>

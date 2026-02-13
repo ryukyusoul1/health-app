@@ -41,7 +41,7 @@ export default function Toast({
   return (
     <div
       className={`
-        fixed top-4 left-1/2 -translate-x-1/2 z-50
+        fixed top-4 left-1/2 -translate-x-1/2 z-[60]
         ${typeStyles[type]} text-white
         px-4 py-3 rounded-xl shadow-lg
         flex items-center gap-2

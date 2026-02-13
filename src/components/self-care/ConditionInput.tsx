@@ -61,8 +61,9 @@ export default function ConditionInput({
               key={score}
               type="button"
               onClick={() => setOverallScore(score)}
+              style={{ touchAction: 'manipulation' }}
               className={`
-                w-14 h-14 rounded-2xl text-3xl
+                w-14 h-14 rounded-2xl text-3xl select-none
                 transition-all duration-150
                 ${overallScore === score
                   ? 'bg-primary/10 ring-2 ring-primary scale-110'
@@ -85,8 +86,9 @@ export default function ConditionInput({
         <button
           type="button"
           onClick={() => setPalpitation(!palpitation)}
+          style={{ touchAction: 'manipulation' }}
           className={`
-            w-full p-3 rounded-xl text-left flex items-center gap-3
+            w-full p-3 rounded-xl text-left flex items-center gap-3 select-none
             transition-colors
             ${palpitation
               ? 'bg-red-50 border-2 border-red-300'
@@ -103,8 +105,9 @@ export default function ConditionInput({
         <button
           type="button"
           onClick={() => setEdema(!edema)}
+          style={{ touchAction: 'manipulation' }}
           className={`
-            w-full p-3 rounded-xl text-left flex items-center gap-3
+            w-full p-3 rounded-xl text-left flex items-center gap-3 select-none
             transition-colors
             ${edema
               ? 'bg-amber-50 border-2 border-amber-300'
@@ -130,8 +133,9 @@ export default function ConditionInput({
               key={level}
               type="button"
               onClick={() => setFatigueLevel(level)}
+              style={{ touchAction: 'manipulation' }}
               className={`
-                flex-1 py-3 rounded-xl font-medium
+                flex-1 py-3 rounded-xl font-medium select-none
                 transition-colors
                 ${fatigueLevel === level
                   ? level >= 4
@@ -157,8 +161,9 @@ export default function ConditionInput({
         <button
           type="button"
           onClick={() => setCpapUsed(!cpapUsed)}
+          style={{ touchAction: 'manipulation' }}
           className={`
-            w-full p-4 rounded-xl text-center
+            w-full p-4 rounded-xl text-center select-none
             transition-colors
             ${cpapUsed
               ? 'bg-green-50 border-2 border-green-300'

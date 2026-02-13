@@ -70,6 +70,7 @@ export default function BPInput({ onSubmit, isLoading }: BPInputProps) {
           <label className="block text-sm text-gray-600 mb-1">上（収縮期）</label>
           <input
             type="number"
+            inputMode="numeric"
             value={systolic}
             onChange={(e) => setSystolic(e.target.value)}
             placeholder="120"
@@ -81,6 +82,7 @@ export default function BPInput({ onSubmit, isLoading }: BPInputProps) {
           <label className="block text-sm text-gray-600 mb-1">下（拡張期）</label>
           <input
             type="number"
+            inputMode="numeric"
             value={diastolic}
             onChange={(e) => setDiastolic(e.target.value)}
             placeholder="80"
@@ -95,6 +97,7 @@ export default function BPInput({ onSubmit, isLoading }: BPInputProps) {
         <label className="block text-sm text-gray-600 mb-1">脈拍（任意）</label>
         <input
           type="number"
+          inputMode="numeric"
           value={pulse}
           onChange={(e) => setPulse(e.target.value)}
           placeholder="70"

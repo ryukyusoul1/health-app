@@ -28,8 +28,9 @@ export default function MissionCard({
         <button
           onClick={() => onComplete(!mission.completed)}
           disabled={isLoading}
+          style={{ touchAction: 'manipulation' }}
           className={`
-            w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5
+            w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 select-none
             transition-all duration-200
             ${mission.completed
               ? 'bg-green-500 border-green-500 text-white'

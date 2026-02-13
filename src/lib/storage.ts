@@ -501,3 +501,60 @@ export function getTodayExerciseSummary(): { total_duration: number; total_calor
     completed_count: logs.length,
   };
 }
+
+// ==================== カスタムレシピ追加 ====================
+export function addRecipe(data: Omit<Recipe, 'created_at'>): Recipe {
+  const recipes = getItem<Recipe[]>(KEYS.RECIPES, []);
+  const newRecipe: Recipe = {
+    ...data,
+    created_at: new Date().toISOString(),
+  };
+  recipes.push(newRecipe);
+  setItem(KEYS.RECIPES, recipes);
+  return newRecipe;
+}
+
+export function deleteRecipe(id: string): void {
+  const recipes = getItem<Recipe[]>(KEYS.RECIPES, []);
+  setItem(KEYS.RECIPES, recipes.filter(r => r.id !== id));
+}
+
+// ==================== カスタム運動追加 ====================
+const CUSTOM_EXERCISES_KEY = 'health_custom_exercises';
+
+export interface CustomExercise {
+  id: string;
+  name: string;
+  description: string;
+  duration_min: number;
+  category: 'stretch' | 'strength' | 'cardio' | 'relaxation';
+  difficulty: 1 | 2 | 3;
+  calories_burned: number;
+  steps: string[];
+  benefits: string[];
+  caution?: string;
+  isCustom: boolean;
+  created_at: string;
+}
+
+export function getCustomExercises(): CustomExercise[] {
+  return getItem<CustomExercise[]>(CUSTOM_EXERCISES_KEY, []);
+}
+
+export function addCustomExercise(data: Omit<CustomExercise, 'id' | 'created_at' | 'isCustom'>): CustomExercise {
+  const exercises = getItem<CustomExercise[]>(CUSTOM_EXERCISES_KEY, []);
+  const newExercise: CustomExercise = {
+    ...data,
+    id: 'custom_' + generateId(),
+    isCustom: true,
+    created_at: new Date().toISOString(),
+  };
+  exercises.push(newExercise);
+  setItem(CUSTOM_EXERCISES_KEY, exercises);
+  return newExercise;
+}
+
+export function deleteCustomExercise(id: string): void {
+  const exercises = getItem<CustomExercise[]>(CUSTOM_EXERCISES_KEY, []);
+  setItem(CUSTOM_EXERCISES_KEY, exercises.filter(e => e.id !== id));
+}

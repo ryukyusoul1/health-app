@@ -138,3 +138,31 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+/* モバイルスクロール最適化 */
+.overscroll-contain {
+  overscroll-behavior: contain;
+}
+
+/* タッチ操作の最適化 */
+button, a, [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* スクロール可能エリアのタッチ操作 */
+.overflow-y-auto, .overflow-auto, .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* range input（スライダー）の改善 */
+input[type="range"] {
+  touch-action: none;
+}
+
+/* select要素のモバイル最適化 */
+select {
+  touch-action: manipulation;
+  -webkit-appearance: none;
+  appearance: none;
+}

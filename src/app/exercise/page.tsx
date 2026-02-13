@@ -14,7 +14,22 @@ export default function ExercisePage() {
   const [summary, setSummary] = useState({ total_duration: 0, total_calories: 0, completed_count: 0 });
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [customExercises, setCustomExercises] = useState<storage.CustomExercise[]>([]);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // 新規運動フォーム
+  const [newExercise, setNewExercise] = useState({
+    name: '',
+    description: '',
+    duration_min: 5,
+    category: 'stretch' as 'stretch' | 'strength' | 'cardio' | 'relaxation',
+    difficulty: 1 as 1 | 2 | 3,
+    calories_burned: 10,
+    stepsText: '',
+    benefitsText: '',
+    caution: '',
+  });
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -37,14 +52,31 @@ export default function ExercisePage() {
     const logs = storage.getExerciseLogs(today);
     setTodayLogs(logs);
     setSummary(storage.getTodayExerciseSummary());
+    setCustomExercises(storage.getCustomExercises());
   }
 
+  // すべての運動（デフォルト + カスタム）
+  const allExercises: Exercise[] = [
+    ...EXERCISES,
+    ...customExercises.map(ce => ({
+      id: ce.id,
+      name: ce.name,
+      description: ce.description,
+      duration_min: ce.duration_min,
+      category: ce.category,
+      difficulty: ce.difficulty,
+      calories_burned: ce.calories_burned,
+      steps: ce.steps,
+      benefits: ce.benefits,
+      caution: ce.caution,
+    })),
+  ];
+
   const filteredExercises = selectedCategory === 'all'
-    ? EXERCISES
-    : EXERCISES.filter(e => e.category === selectedCategory);
+    ? allExercises
+    : allExercises.filter(e => e.category === selectedCategory);
 
   const handleStartExercise = (exercise: Exercise) => {
-    // 運動を開始（記録を追加）
     storage.addExerciseLog({
       logged_date: today,
       exercise_id: exercise.id,
@@ -59,7 +91,6 @@ export default function ExercisePage() {
   };
 
   const handleCompleteExercise = () => {
-    // 最新の未完了ログを完了にする
     const logs = storage.getExerciseLogs(today);
     const incompleteLog = logs.find(l => l.exercise_id === selectedExercise?.id && !l.completed);
     if (incompleteLog) {
@@ -71,6 +102,37 @@ export default function ExercisePage() {
     loadData();
   };
 
+  const handleAddExercise = () => {
+    if (!newExercise.name) {
+      setToast({ message: '運動名は必須です', type: 'error' });
+      return;
+    }
+
+    const steps = newExercise.stepsText.split('\n').filter(l => l.trim()).map(l => l.trim());
+    const benefits = newExercise.benefitsText.split('\n').filter(l => l.trim()).map(l => l.trim());
+
+    storage.addCustomExercise({
+      name: newExercise.name,
+      description: newExercise.description || newExercise.name,
+      duration_min: newExercise.duration_min,
+      category: newExercise.category,
+      difficulty: newExercise.difficulty,
+      calories_burned: newExercise.calories_burned,
+      steps: steps.length > 0 ? steps : ['自分のペースで行う'],
+      benefits: benefits.length > 0 ? benefits : ['健康維持'],
+      caution: newExercise.caution || undefined,
+    });
+
+    setToast({ message: '運動を追加しました！', type: 'success' });
+    setShowAddModal(false);
+    setNewExercise({
+      name: '', description: '', duration_min: 5,
+      category: 'stretch', difficulty: 1, calories_burned: 10,
+      stepsText: '', benefitsText: '', caution: '',
+    });
+    loadData();
+  };
+
   const isExerciseDoneToday = (exerciseId: string) => {
     return todayLogs.some(l => l.exercise_id === exerciseId && l.completed);
   };
@@ -78,8 +140,15 @@ export default function ExercisePage() {
   return (
     <div className="p-4">
       <header className="mb-4">
-        <h1 className="text-2xl font-bold text-gray-800">運動メニュー</h1>
-        <p className="text-gray-600">座ったままできる簡単エクササイズ</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">運動メニュー</h1>
+            <p className="text-gray-600">座ったままできる簡単エクササイズ</p>
+          </div>
+          <Button size="sm" onClick={() => setShowAddModal(true)}>
+            + 追加
+          </Button>
+        </div>
       </header>
 
       {/* 今日のサマリー */}
@@ -121,10 +190,10 @@ export default function ExercisePage() {
       {/* おすすめセクション */}
       <Card className="mb-4">
         <h2 className="font-bold text-gray-800 mb-3">
-          🌟 今日のおすすめ（疲れている時に）
+          今日のおすすめ（疲れている時に）
         </h2>
         <div className="space-y-2">
-          {EXERCISES.filter(e => e.difficulty === 1).slice(0, 3).map(exercise => (
+          {allExercises.filter(e => e.difficulty === 1).slice(0, 3).map(exercise => (
             <ExerciseItem
               key={exercise.id}
               exercise={exercise}
@@ -165,7 +234,6 @@ export default function ExercisePage() {
           <div>
             <p className="text-gray-600 mb-4">{selectedExercise.description}</p>
 
-            {/* 情報 */}
             <div className="grid grid-cols-3 gap-2 mb-4">
               <div className="text-center p-2 bg-gray-50 rounded-xl">
                 <p className="text-xs text-gray-500">時間</p>
@@ -181,7 +249,6 @@ export default function ExercisePage() {
               </div>
             </div>
 
-            {/* やり方 */}
             <div className="mb-4">
               <h3 className="font-bold text-gray-800 mb-2">やり方</h3>
               <ol className="space-y-2">
@@ -196,7 +263,6 @@ export default function ExercisePage() {
               </ol>
             </div>
 
-            {/* 効果 */}
             <div className="mb-4 p-3 bg-green-50 rounded-xl">
               <h3 className="font-bold text-green-700 mb-1 text-sm">期待できる効果</h3>
               <div className="flex flex-wrap gap-1">
@@ -208,21 +274,141 @@ export default function ExercisePage() {
               </div>
             </div>
 
-            {/* 注意 */}
             {selectedExercise.caution && (
               <div className="mb-4 p-3 bg-amber-50 rounded-xl">
-                <p className="text-amber-700 text-sm">⚠️ {selectedExercise.caution}</p>
+                <p className="text-amber-700 text-sm">{selectedExercise.caution}</p>
               </div>
             )}
 
             <Button onClick={handleCompleteExercise} fullWidth>
-              ✓ 完了！
+              完了！
             </Button>
           </div>
         )}
       </Modal>
 
-      {/* トースト */}
+      {/* 運動追加モーダル */}
+      <Modal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="運動を追加"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">運動名 *</label>
+            <input
+              type="text"
+              value={newExercise.name}
+              onChange={(e) => setNewExercise({ ...newExercise, name: e.target.value })}
+              placeholder="例: ウォーキング"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">説明</label>
+            <input
+              type="text"
+              value={newExercise.description}
+              onChange={(e) => setNewExercise({ ...newExercise, description: e.target.value })}
+              placeholder="例: 近所を散歩する"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">カテゴリ</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['stretch', 'strength', 'cardio', 'relaxation'] as const).map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setNewExercise({ ...newExercise, category: cat })}
+                  className={`py-2 rounded-xl text-sm ${
+                    newExercise.category === cat ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {EXERCISE_CATEGORY_LABELS[cat]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500">時間（分）</label>
+              <input
+                type="number"
+                value={newExercise.duration_min}
+                onChange={(e) => setNewExercise({ ...newExercise, duration_min: parseInt(e.target.value) || 0 })}
+                className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500">消費kcal</label>
+              <input
+                type="number"
+                value={newExercise.calories_burned}
+                onChange={(e) => setNewExercise({ ...newExercise, calories_burned: parseInt(e.target.value) || 0 })}
+                className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500">難易度</label>
+              <div className="flex gap-1">
+                {([1, 2, 3] as const).map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setNewExercise({ ...newExercise, difficulty: d })}
+                    className={`flex-1 py-1.5 rounded-lg text-xs ${
+                      newExercise.difficulty === d ? 'bg-primary text-white' : 'bg-gray-100'
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">やり方（1行1ステップ）</label>
+            <textarea
+              value={newExercise.stepsText}
+              onChange={(e) => setNewExercise({ ...newExercise, stepsText: e.target.value })}
+              placeholder={"背筋を伸ばす\nゆっくり深呼吸する"}
+              rows={3}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">効果（1行1つ）</label>
+            <textarea
+              value={newExercise.benefitsText}
+              onChange={(e) => setNewExercise({ ...newExercise, benefitsText: e.target.value })}
+              placeholder={"血行促進\nリラックス効果"}
+              rows={2}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">注意点（任意）</label>
+            <input
+              type="text"
+              value={newExercise.caution}
+              onChange={(e) => setNewExercise({ ...newExercise, caution: e.target.value })}
+              placeholder="例: 動悸がある場合は中止"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200"
+            />
+          </div>
+
+          <Button onClick={handleAddExercise} fullWidth>
+            運動を追加
+          </Button>
+        </div>
+      </Modal>
+
       {toast && (
         <Toast
           message={toast.message}
