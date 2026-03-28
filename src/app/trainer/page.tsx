@@ -3,9 +3,31 @@
 import React, { useEffect, useState, useRef } from 'react';
 import * as storage from '@/lib/storage';
 
+const CHAT_STORAGE_KEY = 'health_ai_chat_history';
+
 interface ChatMessage {
   role: 'user' | 'ai';
   text: string;
+  timestamp: string;
+}
+
+function loadChatHistory(): ChatMessage[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const data = localStorage.getItem(CHAT_STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveChatHistory(messages: ChatMessage[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+  } catch (e) {
+    console.error('Chat save error:', e);
+  }
 }
 
 export default function TrainerPage() {
@@ -16,6 +38,7 @@ export default function TrainerPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // 健康データのサマリーを構築
     const bodyRecords = storage.getBodyCompositions(5);
     const bpRecords = storage.getBloodPressureRecords(5);
     const todayStr = new Date().toISOString().split('T')[0];
@@ -70,10 +93,19 @@ export default function TrainerPage() {
 
     setHealthSummary(data);
 
-    setMessages([{
-      role: 'ai',
-      text: 'こんにちは！健康データをもとにアドバイスします。何でも聞いてください。\n例：「最近の体重の傾向は？」「血圧を下げるには？」「食事のアドバイスをして」',
-    }]);
+    // 保存された会話履歴を読み込む
+    const saved = loadChatHistory();
+    if (saved.length > 0) {
+      setMessages(saved);
+    } else {
+      const welcome: ChatMessage = {
+        role: 'ai',
+        text: 'こんにちは！健康データをもとにアドバイスします。何でも聞いてください。\n例：「最近の体重の傾向は？」「血圧を下げるには？」「食事のアドバイスをして」',
+        timestamp: new Date().toISOString(),
+      };
+      setMessages([welcome]);
+      saveChatHistory([welcome]);
+    }
   }, []);
 
   useEffect(() => {
@@ -92,7 +124,10 @@ export default function TrainerPage() {
     if (!msg || isLoading) return;
 
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: msg }]);
+    const userMsg: ChatMessage = { role: 'user', text: msg, timestamp: new Date().toISOString() };
+    const updated = [...messages, userMsg];
+    setMessages(updated);
+    saveChatHistory(updated);
     setIsLoading(true);
 
     try {
@@ -106,38 +141,73 @@ export default function TrainerPage() {
       });
 
       const data = await res.json();
-
-      if (res.ok) {
-        setMessages(prev => [...prev, { role: 'ai', text: data.message }]);
-      } else {
-        setMessages(prev => [...prev, { role: 'ai', text: data.error || 'エラーが発生しました。しばらく経ってからお試しください。' }]);
-      }
+      const aiMsg: ChatMessage = {
+        role: 'ai',
+        text: res.ok ? data.message : (data.error || 'エラーが発生しました。'),
+        timestamp: new Date().toISOString(),
+      };
+      const withAi = [...updated, aiMsg];
+      setMessages(withAi);
+      saveChatHistory(withAi);
     } catch {
-      setMessages(prev => [...prev, { role: 'ai', text: '通信エラーが発生しました。' }]);
+      const errMsg: ChatMessage = { role: 'ai', text: '通信エラーが発生しました。', timestamp: new Date().toISOString() };
+      const withErr = [...updated, errMsg];
+      setMessages(withErr);
+      saveChatHistory(withErr);
     } finally {
       setIsLoading(false);
     }
   }
 
+  function handleClearHistory() {
+    const welcome: ChatMessage = {
+      role: 'ai',
+      text: 'こんにちは！健康データをもとにアドバイスします。何でも聞いてください。',
+      timestamp: new Date().toISOString(),
+    };
+    setMessages([welcome]);
+    saveChatHistory([welcome]);
+  }
+
+  function formatTimestamp(ts: string) {
+    const d = new Date(ts);
+    return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] pb-16">
-      <header className="p-4 pb-2">
-        <h1 className="text-xl font-bold text-gray-800">AI健康相談</h1>
-        <p className="text-sm text-gray-500">Geminiがあなたのデータを見てアドバイス</p>
+      <header className="p-4 pb-2 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">AI健康相談</h1>
+          <p className="text-sm text-gray-500">Geminiがあなたのデータを見てアドバイス</p>
+        </div>
+        {messages.length > 1 && (
+          <button
+            onClick={handleClearHistory}
+            className="px-3 py-1.5 text-xs bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200"
+          >
+            履歴クリア
+          </button>
+        )}
       </header>
 
       {/* チャット */}
       <div className="flex-1 overflow-y-auto px-4 space-y-3">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[85%] p-3 rounded-2xl text-sm whitespace-pre-wrap ${
-                msg.role === 'user'
-                  ? 'bg-primary text-white rounded-br-sm'
-                  : 'bg-gray-100 text-gray-800 rounded-bl-sm'
-              }`}
-            >
-              {msg.text}
+            <div className={`max-w-[85%] ${msg.role === 'user' ? '' : ''}`}>
+              <div
+                className={`p-3 rounded-2xl text-sm whitespace-pre-wrap ${
+                  msg.role === 'user'
+                    ? 'bg-primary text-white rounded-br-sm'
+                    : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+                }`}
+              >
+                {msg.text}
+              </div>
+              <p className={`text-[10px] text-gray-400 mt-0.5 ${msg.role === 'user' ? 'text-right' : ''}`}>
+                {formatTimestamp(msg.timestamp)}
+              </p>
             </div>
           </div>
         ))}
