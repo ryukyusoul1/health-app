@@ -21,9 +21,9 @@ export async function POST(request: NextRequest) {
 ${healthData}`;
 
     // まず gemini-2.0-flash を試し、ダメなら gemini-1.5-flash にフォールバック
-    const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+    const models = ['gemini-2.0-flash-lite', 'gemini-2.0-flash'];
 
-    let lastError = '';
+    const errors: string[] = [];
     for (const model of models) {
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -51,15 +51,16 @@ ${healthData}`;
         if (text) {
           return NextResponse.json({ message: text });
         }
-        lastError = 'AIからの回答が空でした';
+        errors.push(`${model}: AIからの回答が空でした`);
       } else {
-        lastError = await response.text();
-        console.error(`Gemini API error (${model}):`, lastError);
+        const errText = await response.text();
+        errors.push(`${model}(${response.status}): ${errText.slice(0, 150)}`);
+        console.error(`Gemini API error (${model}):`, errText);
       }
     }
 
     return NextResponse.json(
-      { error: `AIエラー: ${lastError.slice(0, 200)}` },
+      { error: `AIエラー: ${errors.join(' | ')}` },
       { status: 500 }
     );
   } catch (error) {
