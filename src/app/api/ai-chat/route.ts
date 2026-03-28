@@ -27,7 +27,7 @@ ${healthData}`;
     ];
 
     if (history && Array.isArray(history)) {
-      const recent = history.slice(-10);
+      const recent = history.slice(-20);
       for (const msg of recent) {
         messages.push({
           role: msg.role === 'user' ? 'user' : 'assistant',
