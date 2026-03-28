@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, healthData } = await request.json();
+    const { message, healthData, history } = await request.json();
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -16,9 +16,27 @@ export async function POST(request: NextRequest) {
 ユーザーの健康データを元に、優しく的確なアドバイスをしてください。
 医師ではないため、診断はできません。あくまで一般的な健康アドバイスに留めてください。
 回答は日本語で、簡潔に（200文字程度で）お願いします。
+会話の流れを踏まえて回答してください。
 
 ユーザーの最新データ:
 ${healthData}`;
+
+    // 会話履歴を構築（直近10件まで）
+    const messages: { role: string; content: string }[] = [
+      { role: 'system', content: systemPrompt },
+    ];
+
+    if (history && Array.isArray(history)) {
+      const recent = history.slice(-10);
+      for (const msg of recent) {
+        messages.push({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.text,
+        });
+      }
+    }
+
+    messages.push({ role: 'user', content: message });
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -28,10 +46,7 @@ ${healthData}`;
       },
       body: JSON.stringify({
         model: 'google/gemini-2.0-flash-lite-001',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: message },
-        ],
+        messages,
         max_tokens: 512,
         temperature: 0.7,
       }),

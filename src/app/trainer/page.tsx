@@ -137,6 +137,7 @@ export default function TrainerPage() {
         body: JSON.stringify({
           message: msg,
           healthData: healthSummary,
+          history: updated.filter(m => m.role === 'user' || m.role === 'ai').slice(-10),
         }),
       });
 
