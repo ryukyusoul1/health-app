@@ -47,9 +47,14 @@ function FoodLogContent() {
   const [selectedPreset, setSelectedPreset] = useState<EatingOutPreset | null>(null);
   const [customName, setCustomName] = useState('');
   const [portion, setPortion] = useState('1');
-  const [activeTab, setActiveTab] = useState<'recipe' | 'preset' | 'homemade' | 'custom'>('custom');
+  const [activeTab, setActiveTab] = useState<'ai' | 'recipe' | 'preset' | 'homemade' | 'custom'>('ai');
   const [customCalories, setCustomCalories] = useState('');
   const [customSalt, setCustomSalt] = useState('');
+
+  // AI推定
+  const [aiInput, setAiInput] = useState('');
+  const [aiEstimating, setAiEstimating] = useState(false);
+  const [aiResult, setAiResult] = useState<{ name: string; calories: number; salt_g: number; carbs_g: number; protein_g: number; fiber_g: number } | null>(null);
 
   // 手作り用の調味料リスト
   const [seasoningEntries, setSeasoningEntries] = useState<SeasoningEntry[]>([]);
@@ -146,7 +151,14 @@ function FoodLogContent() {
         portion: portionNum,
       };
 
-      if (activeTab === 'recipe' && selectedRecipe) {
+      if (activeTab === 'ai' && aiResult) {
+        data.custom_name = aiResult.name;
+        data.calories = aiResult.calories * portionNum;
+        data.salt_g = aiResult.salt_g * portionNum;
+        data.carbs_g = aiResult.carbs_g * portionNum;
+        data.protein_g = aiResult.protein_g * portionNum;
+        data.fiber_g = aiResult.fiber_g * portionNum;
+      } else if (activeTab === 'recipe' && selectedRecipe) {
         data.recipe_id = selectedRecipe.id;
         data.recipe = selectedRecipe;
         data.calories = (selectedRecipe.calories || 0) * portionNum;
@@ -211,7 +223,9 @@ function FoodLogContent() {
     setPortion('1');
     setCustomCalories('');
     setCustomSalt('');
-    setActiveTab('custom');
+    setAiInput('');
+    setAiResult(null);
+    setActiveTab('ai');
   };
 
   const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -288,7 +302,7 @@ function FoodLogContent() {
 
         {/* タブ切り替え */}
         <div className="flex gap-1 mb-4">
-          {(['custom', 'recipe', 'homemade', 'preset'] as const).map(tab => (
+          {(['ai', 'custom', 'recipe', 'homemade', 'preset'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -296,13 +310,83 @@ function FoodLogContent() {
                 activeTab === tab ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-600'
               }`}
             >
-              {tab === 'custom' ? '自由入力' : tab === 'recipe' ? 'レシピ' : tab === 'homemade' ? '手作り' : '外食'}
+              {tab === 'ai' ? 'AI推定' : tab === 'custom' ? '自由入力' : tab === 'recipe' ? 'レシピ' : tab === 'homemade' ? '手作り' : '外食'}
             </button>
           ))}
         </div>
 
         {/* 選択エリア */}
         <div className="mb-4">
+          {activeTab === 'ai' && (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500">食べたものを入力するとAIが栄養素を推定します</p>
+              <textarea
+                value={aiInput}
+                onChange={e => setAiInput(e.target.value)}
+                placeholder={"例:\nコロッケ2個と白ごはん\nスーパーの唐揚げ弁当\nコンビニのサラダとおにぎり2個"}
+                rows={3}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm resize-none"
+              />
+              <button
+                onClick={async () => {
+                  if (!aiInput.trim() || aiEstimating) return;
+                  setAiEstimating(true);
+                  setAiResult(null);
+                  try {
+                    const res = await fetch('/api/ai-food', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ description: aiInput.trim() }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.name) {
+                      setAiResult(data);
+                    } else {
+                      setToast({ message: data.error || '推定に失敗しました', type: 'error' });
+                    }
+                  } catch {
+                    setToast({ message: '通信エラーが発生しました', type: 'error' });
+                  } finally {
+                    setAiEstimating(false);
+                  }
+                }}
+                disabled={!aiInput.trim() || aiEstimating}
+                className="w-full py-3 bg-primary/10 text-primary rounded-xl font-medium text-sm disabled:opacity-50"
+              >
+                {aiEstimating ? '推定中...' : 'AIで栄養素を推定'}
+              </button>
+
+              {aiResult && (
+                <div className="bg-green-50 rounded-xl p-4">
+                  <p className="font-bold text-gray-800 mb-2">{aiResult.name}</p>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white rounded-lg p-2">
+                      <p className="text-[10px] text-gray-500">カロリー</p>
+                      <p className="font-bold text-sm">{aiResult.calories}<span className="text-[10px]">kcal</span></p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2">
+                      <p className="text-[10px] text-gray-500">塩分</p>
+                      <p className="font-bold text-sm">{aiResult.salt_g}<span className="text-[10px]">g</span></p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2">
+                      <p className="text-[10px] text-gray-500">糖質</p>
+                      <p className="font-bold text-sm">{aiResult.carbs_g}<span className="text-[10px]">g</span></p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2">
+                      <p className="text-[10px] text-gray-500">たんぱく質</p>
+                      <p className="font-bold text-sm">{aiResult.protein_g}<span className="text-[10px]">g</span></p>
+                    </div>
+                    <div className="bg-white rounded-lg p-2">
+                      <p className="text-[10px] text-gray-500">食物繊維</p>
+                      <p className="font-bold text-sm">{aiResult.fiber_g}<span className="text-[10px]">g</span></p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-2 text-center">※ AIによる推定値です</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'recipe' && (
             <div className="space-y-2">
               {recipes.map((recipe) => (
@@ -490,6 +574,7 @@ function FoodLogContent() {
           fullWidth
           disabled={
             isSaving ||
+            (activeTab === 'ai' && !aiResult) ||
             (activeTab === 'recipe' && !selectedRecipe) ||
             (activeTab === 'preset' && !selectedPreset) ||
             (activeTab === 'homemade' && (!homemadeName || seasoningEntries.length === 0)) ||
