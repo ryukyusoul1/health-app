@@ -278,7 +278,7 @@ export default function BloodPressurePage() {
                   <LineChart data={graphData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                    <YAxis domain={['dataMin - 10', 'dataMax + 10']} tick={{ fontSize: 11 }} />
+                    <YAxis domain={[(min: number) => Math.floor(min - 10), (max: number) => Math.ceil(max + 10)]} tick={{ fontSize: 11 }} />
                     <Tooltip />
                     <Legend />
                     <ReferenceLine y={140} stroke="#EF4444" strokeDasharray="3 3" label={{ value: '高血圧', fontSize: 10 }} />

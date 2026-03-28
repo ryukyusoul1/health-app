@@ -430,39 +430,55 @@ export default function BodyCompositionPage() {
             </div>
           </Card>
 
-          {/* グラフ */}
-          <Card className="mb-4">
-            {graphData.length < 2 ? (
+          {/* グラフ（指標ごとに個別表示） */}
+          {graphData.length < 2 ? (
+            <Card className="mb-4">
               <p className="text-gray-400 text-sm text-center py-8">
                 グラフ表示には2日分以上のデータが必要です
               </p>
-            ) : (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={graphData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Legend />
-                    {selectedMetrics.map(m => (
-                      <Line
-                        key={m}
-                        type="monotone"
-                        dataKey={m}
-                        name={METRIC_LABELS[m]}
-                        stroke={METRIC_COLORS[m]}
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        connectNulls
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </Card>
-
+            </Card>
+          ) : (
+            selectedMetrics.map(m => {
+              const values = graphData.map(d => d[m]).filter((v): v is number => v != null);
+              if (values.length < 2) return null;
+              const min = Math.min(...values);
+              const max = Math.max(...values);
+              const padding = Math.max((max - min) * 0.2, 0.5);
+              const yMin = Math.floor((min - padding) * 10) / 10;
+              const yMax = Math.ceil((max + padding) * 10) / 10;
+              return (
+                <Card key={m} className="mb-4">
+                  <h4 className="text-sm font-bold mb-2" style={{ color: METRIC_COLORS[m] }}>
+                    {METRIC_LABELS[m]}
+                  </h4>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={graphData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                        <YAxis domain={[yMin, yMax]} tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Line
+                          type="monotone"
+                          dataKey={m}
+                          name={METRIC_LABELS[m]}
+                          stroke={METRIC_COLORS[m]}
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              );
+            })
+          )}
+          {graphData.length >= 2 && (
+            <Card className="mb-4">
+              <p className="text-gray-400 text-xs text-center">※ 各指標を個別のスケールで表示しています</p>
+            </Card>
+          )}
           {/* 最新値サマリー */}
           {records.length > 0 && (
             <Card>
