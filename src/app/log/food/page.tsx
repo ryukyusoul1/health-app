@@ -47,7 +47,9 @@ function FoodLogContent() {
   const [selectedPreset, setSelectedPreset] = useState<EatingOutPreset | null>(null);
   const [customName, setCustomName] = useState('');
   const [portion, setPortion] = useState('1');
-  const [activeTab, setActiveTab] = useState<'recipe' | 'preset' | 'homemade' | 'custom'>('recipe');
+  const [activeTab, setActiveTab] = useState<'recipe' | 'preset' | 'homemade' | 'custom'>('custom');
+  const [customCalories, setCustomCalories] = useState('');
+  const [customSalt, setCustomSalt] = useState('');
 
   // 手作り用の調味料リスト
   const [seasoningEntries, setSeasoningEntries] = useState<SeasoningEntry[]>([]);
@@ -173,6 +175,8 @@ function FoodLogContent() {
         });
       } else if (activeTab === 'custom' && customName) {
         data.custom_name = customName;
+        if (customCalories) data.calories = parseFloat(customCalories) * portionNum;
+        if (customSalt) data.salt_g = parseFloat(customSalt) * portionNum;
       }
 
       storage.addFoodLog(data);
@@ -205,7 +209,9 @@ function FoodLogContent() {
     setSeasoningEntries([]);
     setHomemadeServings('2');
     setPortion('1');
-    setActiveTab('recipe');
+    setCustomCalories('');
+    setCustomSalt('');
+    setActiveTab('custom');
   };
 
   const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -282,7 +288,7 @@ function FoodLogContent() {
 
         {/* タブ切り替え */}
         <div className="flex gap-1 mb-4">
-          {(['recipe', 'homemade', 'preset', 'custom'] as const).map(tab => (
+          {(['custom', 'recipe', 'homemade', 'preset'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -290,7 +296,7 @@ function FoodLogContent() {
                 activeTab === tab ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-600'
               }`}
             >
-              {tab === 'recipe' ? 'レシピ' : tab === 'homemade' ? '手作り' : tab === 'preset' ? '外食' : 'その他'}
+              {tab === 'custom' ? '自由入力' : tab === 'recipe' ? 'レシピ' : tab === 'homemade' ? '手作り' : '外食'}
             </button>
           ))}
         </div>
@@ -426,13 +432,38 @@ function FoodLogContent() {
           )}
 
           {activeTab === 'custom' && (
-            <input
-              type="text"
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              placeholder="例: コンビニのサラダ"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200"
-            />
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder="例: コンビニのサラダ、唐揚げ弁当"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500">カロリー (任意)</label>
+                  <input
+                    type="number"
+                    value={customCalories}
+                    onChange={e => setCustomCalories(e.target.value)}
+                    placeholder="kcal"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">塩分 (任意)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={customSalt}
+                    onChange={e => setCustomSalt(e.target.value)}
+                    placeholder="g"
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
 

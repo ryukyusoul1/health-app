@@ -1,6 +1,6 @@
 'use client';
 
-import { BloodPressure, WeightLog, FoodLog, ConditionLog, Recipe, EatingOutPreset, MedicalVisit, Mission, DailyNutritionSummary } from '@/types';
+import { BloodPressure, WeightLog, BodyComposition, FoodLog, ConditionLog, Recipe, EatingOutPreset, MedicalVisit, Mission, DailyNutritionSummary } from '@/types';
 
 // ストレージキー
 const KEYS = {
@@ -16,6 +16,7 @@ const KEYS = {
   INITIALIZED: 'health_initialized',
   CUSTOM_FOODS: 'health_custom_foods',
   EXERCISE_LOG: 'health_exercise_log',
+  BODY_COMPOSITION: 'health_body_composition',
 };
 
 // 汎用的なlocalStorage操作
@@ -93,6 +94,45 @@ export function addWeight(data: Omit<WeightLog, 'id' | 'created_at'>): WeightLog
 export function deleteWeight(id: string): void {
   const records = getItem<WeightLog[]>(KEYS.WEIGHT, []);
   setItem(KEYS.WEIGHT, records.filter(r => r.id !== id));
+}
+
+// ==================== 体組成 ====================
+export function getBodyCompositions(limit?: number): BodyComposition[] {
+  const records = getItem<BodyComposition[]>(KEYS.BODY_COMPOSITION, []);
+  const sorted = records.sort((a, b) =>
+    new Date(b.measured_date).getTime() - new Date(a.measured_date).getTime()
+  );
+  return limit ? sorted.slice(0, limit) : sorted;
+}
+
+export function getBodyCompositionByDate(date: string): BodyComposition | null {
+  const records = getItem<BodyComposition[]>(KEYS.BODY_COMPOSITION, []);
+  return records.find(r => r.measured_date === date) || null;
+}
+
+export function saveBodyComposition(data: Omit<BodyComposition, 'id' | 'created_at'>): BodyComposition {
+  const records = getItem<BodyComposition[]>(KEYS.BODY_COMPOSITION, []);
+  const existing = records.findIndex(r => r.measured_date === data.measured_date);
+
+  const record: BodyComposition = {
+    ...data,
+    id: existing >= 0 ? records[existing].id : generateId(),
+    created_at: new Date().toISOString(),
+  };
+
+  if (existing >= 0) {
+    records[existing] = record;
+  } else {
+    records.push(record);
+  }
+
+  setItem(KEYS.BODY_COMPOSITION, records);
+  return record;
+}
+
+export function deleteBodyComposition(id: string): void {
+  const records = getItem<BodyComposition[]>(KEYS.BODY_COMPOSITION, []);
+  setItem(KEYS.BODY_COMPOSITION, records.filter(r => r.id !== id));
 }
 
 // ==================== 食事記録 ====================

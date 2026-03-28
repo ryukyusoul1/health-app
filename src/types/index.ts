@@ -19,6 +19,21 @@ export interface WeightLog {
   created_at: string;
 }
 
+// 体組成記録
+export interface BodyComposition {
+  id: string;
+  measured_date: string;
+  weight_kg: number;
+  body_fat_pct: number | null;
+  visceral_fat_level: number | null;
+  skeletal_muscle_pct: number | null;
+  body_age: number | null;
+  basal_metabolism: number | null;
+  bmi: number | null;
+  note?: string;
+  created_at: string;
+}
+
 // レシピ
 export interface Recipe {
   id: string;

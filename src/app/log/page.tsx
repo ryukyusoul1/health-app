@@ -17,14 +17,14 @@ export default function LogPage() {
       href: '/log/blood-pressure',
       icon: '💓',
       title: '血圧記録',
-      description: '朝・夜の血圧を記録',
+      description: '朝・夜の血圧を記録・グラフ確認',
       color: 'bg-red-50',
     },
     {
-      href: '/log/weight',
+      href: '/log/body',
       icon: '⚖️',
-      title: '体重記録',
-      description: '毎日の体重を記録',
+      title: '体組成記録',
+      description: '体重・体脂肪率・内臓脂肪・骨格筋率など',
       color: 'bg-blue-50',
     },
     {

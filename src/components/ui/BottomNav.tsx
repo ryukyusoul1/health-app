@@ -6,9 +6,9 @@ import { usePathname } from 'next/navigation';
 
 const navItems = [
   { href: '/', icon: '🏠', label: 'ホーム' },
-  { href: '/meals', icon: '🍱', label: '献立' },
+  { href: '/log/body', icon: '⚖️', label: '体組成' },
   { href: '/log', icon: '📝', label: '記録' },
-  { href: '/exercise', icon: '🏃', label: '運動' },
+  { href: '/meals', icon: '🍱', label: '献立' },
   { href: '/trainer', icon: '🤖', label: 'AI相談' },
 ];
 
