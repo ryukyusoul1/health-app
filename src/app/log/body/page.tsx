@@ -35,7 +35,7 @@ const METRIC_COLORS: Record<GraphMetric, string> = {
 
 export default function BodyCompositionPage() {
   const [records, setRecords] = useState<BodyComposition[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(storage.toLocalDateString());
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedMetrics, setSelectedMetrics] = useState<GraphMetric[]>(['weight_kg', 'body_fat_pct']);
@@ -199,7 +199,7 @@ export default function BodyCompositionPage() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                  onClick={() => setSelectedDate(storage.toLocalDateString())}
                   className="px-3 py-1.5 text-xs bg-primary/10 text-primary rounded-lg font-medium"
                 >
                   今日
@@ -244,7 +244,7 @@ export default function BodyCompositionPage() {
                     const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const isSelected = dateStr === selectedDate;
                     const hasRecord = recordDates.has(dateStr);
-                    const isToday = dateStr === new Date().toISOString().split('T')[0];
+                    const isToday = dateStr === storage.toLocalDateString();
                     return (
                       <button
                         key={dateStr}

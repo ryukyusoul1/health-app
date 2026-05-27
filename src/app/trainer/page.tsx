@@ -41,7 +41,7 @@ export default function TrainerPage() {
     // 健康データのサマリーを構築
     const bodyRecords = storage.getBodyCompositions(5);
     const bpRecords = storage.getBloodPressureRecords(5);
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = storage.toLocalDateString();
     const { summary } = storage.getFoodLogs(todayStr);
     const condition = storage.getConditionLog(todayStr);
 

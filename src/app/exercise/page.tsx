@@ -31,7 +31,7 @@ export default function ExercisePage() {
     caution: '',
   });
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = storage.toLocalDateString();
 
   const categories = [
     { key: 'all', label: 'すべて' },

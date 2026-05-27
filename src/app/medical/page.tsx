@@ -38,7 +38,7 @@ export default function MedicalPage() {
       setVisits(data);
 
       // 次回予約を探す
-      const today = new Date().toISOString().split('T')[0];
+      const today = storage.toLocalDateString();
       const upcoming = data.find(v => v.next_visit && v.next_visit >= today);
       setNextVisit(upcoming || null);
     } catch (error) {

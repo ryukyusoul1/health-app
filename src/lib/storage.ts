@@ -19,6 +19,16 @@ const KEYS = {
   BODY_COMPOSITION: 'health_body_composition',
 };
 
+// ローカル日付（YYYY-MM-DD）を端末タイムゾーン基準で取得するヘルパー。
+// `new Date().toISOString().split('T')[0]` は UTC 基準のため、JSTの早朝（午前9時前）は
+// 前日扱いになるバグが発生する。本関数は必ずローカルの「今日」を返す。
+export function toLocalDateString(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 // 汎用的なlocalStorage操作
 function getItem<T>(key: string, defaultValue: T): T {
   if (typeof window === 'undefined') return defaultValue;
@@ -138,7 +148,7 @@ export function deleteBodyComposition(id: string): void {
 // ==================== 食事記録 ====================
 export function getFoodLogs(date?: string): { logs: FoodLog[]; summary: DailyNutritionSummary } {
   const records = getItem<FoodLog[]>(KEYS.FOOD_LOG, []);
-  const targetDate = date || new Date().toISOString().split('T')[0];
+  const targetDate = date || toLocalDateString();
 
   const logs = records
     .filter(r => r.logged_date === targetDate)
@@ -313,13 +323,15 @@ export function getStreakDays(): number {
   if (conditions.length === 0) return 0;
 
   const dates = [...new Set(conditions.map(c => c.logged_date))].sort().reverse();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateString();
+  const [ty, tm, td] = today.split('-').map(Number);
 
   let streak = 0;
-  let currentDate = new Date(today);
+  // ローカルタイムゾーン基準の日付オブジェクトを作る（UTCずれ防止）
+  let currentDate = new Date(ty, tm - 1, td);
 
   for (const date of dates) {
-    const expectedDate = currentDate.toISOString().split('T')[0];
+    const expectedDate = toLocalDateString(currentDate);
     if (date === expectedDate) {
       streak++;
       currentDate.setDate(currentDate.getDate() - 1);
@@ -533,7 +545,7 @@ export function deleteExerciseLog(id: string): void {
 
 // 今日の運動サマリー
 export function getTodayExerciseSummary(): { total_duration: number; total_calories: number; completed_count: number } {
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateString();
   const logs = getExerciseLogs(today).filter(l => l.completed);
   return {
     total_duration: logs.reduce((sum, l) => sum + l.duration_min, 0),

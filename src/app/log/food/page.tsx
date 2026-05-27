@@ -27,7 +27,7 @@ function FoodLogContent() {
 
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [summary, setSummary] = useState<DailyNutritionSummary>({
-    date: new Date().toISOString().split('T')[0],
+    date: storage.toLocalDateString(),
     salt_g: 0,
     carbs_g: 0,
     calories: 0,
@@ -61,7 +61,7 @@ function FoodLogContent() {
   const [homemadeName, setHomemadeName] = useState('');
   const [homemadeServings, setHomemadeServings] = useState('2');
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = storage.toLocalDateString();
 
   useEffect(() => {
     if (!storage.isInitialized()) {

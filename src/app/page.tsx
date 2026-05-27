@@ -14,7 +14,7 @@ export default function Home() {
   const [latestBP, setLatestBP] = useState<BloodPressure | null>(null);
   const [latestBody, setLatestBody] = useState<BodyComposition | null>(null);
   const [nutritionSummary, setNutritionSummary] = useState<DailyNutritionSummary>({
-    date: new Date().toISOString().split('T')[0],
+    date: storage.toLocalDateString(),
     salt_g: 0, carbs_g: 0, calories: 0, protein_g: 0, fiber_g: 0,
   });
   const [todayCondition, setTodayCondition] = useState<ConditionLog | null>(null);
@@ -23,7 +23,7 @@ export default function Home() {
   const [todayMeals, setTodayMeals] = useState<Recipe[]>([]);
 
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = storage.toLocalDateString(today);
   const dateStr = `${today.getMonth() + 1}月${today.getDate()}日（${WEEKDAYS[today.getDay()]}）`;
 
   useEffect(() => {

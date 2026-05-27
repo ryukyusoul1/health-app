@@ -15,7 +15,7 @@ export default function ConditionPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = storage.toLocalDateString();
 
   useEffect(() => {
     if (!storage.isInitialized()) {
@@ -35,7 +35,7 @@ export default function ConditionPage() {
       for (let i = 0; i < 14; i++) {
         const date = new Date();
         date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = storage.toLocalDateString(date);
         const condition = storage.getConditionLog(dateStr);
         if (condition) {
           allConditions.push(condition);

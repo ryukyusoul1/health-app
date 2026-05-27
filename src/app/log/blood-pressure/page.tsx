@@ -18,7 +18,7 @@ export default function BloodPressurePage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [tab, setTab] = useState<'input' | 'graph'>('input');
   const [graphPeriod, setGraphPeriod] = useState<'1w' | '1m' | '3m'>('1m');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(storage.toLocalDateString());
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
@@ -99,7 +99,7 @@ export default function BloodPressurePage() {
   const recordDates = useMemo(() => {
     const dates = new Set<string>();
     records.forEach(r => {
-      dates.add(new Date(r.measured_at).toISOString().split('T')[0]);
+      dates.add(storage.toLocalDateString(new Date(r.measured_at)));
     });
     return dates;
   }, [records]);
@@ -162,7 +162,7 @@ export default function BloodPressurePage() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                  onClick={() => setSelectedDate(storage.toLocalDateString())}
                   className="px-3 py-1.5 text-xs bg-primary/10 text-primary rounded-lg font-medium"
                 >
                   今日
@@ -192,7 +192,7 @@ export default function BloodPressurePage() {
                     const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const isSelected = dateStr === selectedDate;
                     const hasRecord = recordDates.has(dateStr);
-                    const isToday = dateStr === new Date().toISOString().split('T')[0];
+                    const isToday = dateStr === storage.toLocalDateString();
                     return (
                       <button
                         key={dateStr}
