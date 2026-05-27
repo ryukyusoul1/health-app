@@ -532,6 +532,62 @@ export default function BodyCompositionPage() {
         </>
       )}
 
+      {/* 4/23以前の旧データ補正（体重計の表示異常分） */}
+      <Card className="mt-6 bg-amber-50 border border-amber-200">
+        <details>
+          <summary className="cursor-pointer text-sm font-medium text-amber-900 select-none">
+            ⚙️ 4/23以前の内臓脂肪・体年齢を補正する
+          </summary>
+          <div className="mt-3 text-xs text-amber-900 space-y-2">
+            <p>
+              体重計の表示異常で誤って低めに入っていた 2026/04/23 以前の
+              「内臓脂肪レベル」「体年齢」を、現在値を基準にやんわり高めに
+              （最古 +3、4/23 +1）線形補正します。1回限り。
+            </p>
+            <p className="text-amber-700">
+              実行前のデータは内部にバックアップされます（後で取消可能）。
+            </p>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (storage.isOldBodyCompMigrated()) {
+                    setToast({ message: 'すでに補正済みです', type: 'error' });
+                    return;
+                  }
+                  if (!confirm('4/23以前の内臓脂肪レベルと体年齢を補正します。よろしいですか？')) return;
+                  const r = storage.migrateOldBodyComposition();
+                  if (r.migrated > 0) {
+                    setToast({ message: `${r.migrated}件を補正しました（基準: 内臓脂肪${r.baselineVisceral}・体年齢${r.baselineBodyAge}）`, type: 'success' });
+                    loadRecords();
+                  } else {
+                    setToast({ message: '補正対象が見つかりませんでした', type: 'error' });
+                  }
+                }}
+                className="px-3 py-2 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700"
+              >
+                補正を実行
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!confirm('補正前のデータに戻します。よろしいですか？')) return;
+                  if (storage.restoreOldBodyCompositionBackup()) {
+                    setToast({ message: '補正前のデータに戻しました', type: 'success' });
+                    loadRecords();
+                  } else {
+                    setToast({ message: 'バックアップがありません', type: 'error' });
+                  }
+                }}
+                className="px-3 py-2 bg-white text-amber-700 border border-amber-300 rounded-lg text-xs font-medium hover:bg-amber-100"
+              >
+                取り消す
+              </button>
+            </div>
+          </div>
+        </details>
+      </Card>
+
       {toast && (
         <Toast
           message={toast.message}

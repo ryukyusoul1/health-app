@@ -145,6 +145,87 @@ export function deleteBodyComposition(id: string): void {
   setItem(KEYS.BODY_COMPOSITION, records.filter(r => r.id !== id));
 }
 
+// 体組成の旧データ補正：体重計の表示異常で 4/23 以前の内臓脂肪レベルと体年齢が低めに
+// 入力されていたので、現在値（4/23 より後の最新値）を基準に「最古+3 → 4/23+1」で
+// 線形に補間し、なだらかな下降カーブにする。1回だけ実行される（フラグで判定）。
+export interface OldBodyCompMigrationResult {
+  already: boolean;
+  migrated: number;
+  baselineVisceral: number | null;
+  baselineBodyAge: number | null;
+  backup: BodyComposition[] | null;
+}
+const OLD_BODY_COMP_MIGRATION_FLAG = 'health_body_comp_migration_v1';
+const OLD_BODY_COMP_BACKUP_KEY = 'health_body_comp_backup_v1';
+const OLD_BODY_COMP_BOUNDARY = '2026-04-23';
+
+export function migrateOldBodyComposition(): OldBodyCompMigrationResult {
+  if (typeof window === 'undefined') {
+    return { already: false, migrated: 0, baselineVisceral: null, baselineBodyAge: null, backup: null };
+  }
+  if (localStorage.getItem(OLD_BODY_COMP_MIGRATION_FLAG)) {
+    return { already: true, migrated: 0, baselineVisceral: null, baselineBodyAge: null, backup: null };
+  }
+  const records = getItem<BodyComposition[]>(KEYS.BODY_COMPOSITION, []);
+  if (records.length === 0) {
+    localStorage.setItem(OLD_BODY_COMP_MIGRATION_FLAG, new Date().toISOString());
+    return { already: false, migrated: 0, baselineVisceral: null, baselineBodyAge: null, backup: [] };
+  }
+
+  // 念のためバックアップ
+  const backup = JSON.parse(JSON.stringify(records)) as BodyComposition[];
+  localStorage.setItem(OLD_BODY_COMP_BACKUP_KEY, JSON.stringify(backup));
+
+  const sorted = [...records].sort((a, b) => a.measured_date.localeCompare(b.measured_date));
+  const postBoundary = sorted.find(r => r.measured_date > OLD_BODY_COMP_BOUNDARY);
+  const vBase = postBoundary?.visceral_fat_level ?? null;
+  const aBase = postBoundary?.body_age ?? null;
+
+  const toMigrate = sorted.filter(r => r.measured_date <= OLD_BODY_COMP_BOUNDARY);
+  const N = toMigrate.length;
+  let migrated = 0;
+  toMigrate.forEach((r, i) => {
+    // factor: 1 (最古) → 0 (4/23)
+    const factor = N <= 1 ? 1 : (N - 1 - i) / (N - 1);
+    // +1 (4/23) 〜 +3 (最古) のなだらかカーブ
+    const delta = 1 + factor * 2;
+    if (vBase !== null) r.visceral_fat_level = Math.round(vBase + delta);
+    if (aBase !== null) r.body_age = Math.round(aBase + delta);
+    migrated++;
+  });
+
+  // sorted 内のオブジェクトは records のオブジェクトと同じ参照なので、直接 setItem で保存可能
+  setItem(KEYS.BODY_COMPOSITION, records);
+  localStorage.setItem(OLD_BODY_COMP_MIGRATION_FLAG, new Date().toISOString());
+
+  return {
+    already: false,
+    migrated,
+    baselineVisceral: vBase,
+    baselineBodyAge: aBase,
+    backup,
+  };
+}
+
+export function restoreOldBodyCompositionBackup(): boolean {
+  if (typeof window === 'undefined') return false;
+  const backup = localStorage.getItem(OLD_BODY_COMP_BACKUP_KEY);
+  if (!backup) return false;
+  try {
+    const parsed = JSON.parse(backup) as BodyComposition[];
+    setItem(KEYS.BODY_COMPOSITION, parsed);
+    localStorage.removeItem(OLD_BODY_COMP_MIGRATION_FLAG);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isOldBodyCompMigrated(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !!localStorage.getItem(OLD_BODY_COMP_MIGRATION_FLAG);
+}
+
 // ==================== 食事記録 ====================
 export function getFoodLogs(date?: string): { logs: FoodLog[]; summary: DailyNutritionSummary } {
   const records = getItem<FoodLog[]>(KEYS.FOOD_LOG, []);
