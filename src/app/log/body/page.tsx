@@ -253,10 +253,38 @@ export default function BodyCompositionPage() {
 
   return (
     <div className="p-4 pb-24">
-      <header className="mb-4">
-        <h1 className="text-xl font-bold text-gray-800">体組成記録</h1>
-        <p className="text-sm text-gray-500">体重計のデータを毎日記録</p>
+      <header className="mb-4 flex items-end justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">体組成記録</h1>
+          <p className="text-sm text-gray-500">体重計のデータを毎日記録</p>
+        </div>
+        <a
+          href="/settings"
+          className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 whitespace-nowrap"
+        >
+          ⚙️ データ管理
+        </a>
       </header>
+
+      {/* データが空の場合の緊急復元バナー */}
+      {records.length === 0 && (
+        <Card className="mb-4 bg-rose-50 border border-rose-300">
+          <h3 className="font-bold text-rose-900 mb-2 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>記録が0件です</span>
+          </h3>
+          <p className="text-xs text-rose-900/80 mb-3">
+            iOS Safari のストレージクリーンアップでデータが消えた可能性があります。
+            設定ページから JSON バックアップを読み込むか、緊急復元できます。
+          </p>
+          <a
+            href="/settings"
+            className="inline-block px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700"
+          >
+            🆘 データ管理ページへ
+          </a>
+        </Card>
+      )}
 
       {/* タブ */}
       <div className="flex gap-2 mb-4">

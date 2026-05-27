@@ -1,18 +1,214 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Card from '@/components/ui/Card';
+import Toast from '@/components/ui/Toast';
 import { USER_PROFILE, NUTRITION_TARGETS } from '@/lib/constants';
+import * as storage from '@/lib/storage';
+import type { BodyComposition } from '@/types';
+
+// localStorage に保存されてる health-app 関連キー
+const HEALTH_KEYS = [
+  'health_blood_pressure',
+  'health_weight',
+  'health_food_log',
+  'health_condition',
+  'health_recipes',
+  'health_eating_out',
+  'health_medical_visits',
+  'health_missions',
+  'health_user_missions',
+  'health_custom_foods',
+  'health_exercise_log',
+  'health_body_composition',
+  'health_initialized',
+  'health_ai_chat_history',
+  'health_body_comp_backup_v1',
+  'health_body_comp_migration_v1',
+];
+
+// 私が手元に持ってる 5/25–27 の体組成データ（スクショより）
+const SCREENSHOT_RESTORE_DATA: Omit<BodyComposition, 'id' | 'created_at'>[] = [
+  { measured_date: '2026-05-25', weight_kg: 99.0, body_fat_pct: 29.5, visceral_fat_level: 23, skeletal_muscle_pct: 29.6, body_age: 62, basal_metabolism: 2028, bmi: 34.3 },
+  { measured_date: '2026-05-26', weight_kg: 99.2, body_fat_pct: 29.8, visceral_fat_level: 23, skeletal_muscle_pct: 29.4, body_age: 63, basal_metabolism: 2028, bmi: 34.3 },
+  { measured_date: '2026-05-27', weight_kg: 99.7, body_fat_pct: 28.4, visceral_fat_level: 24, skeletal_muscle_pct: 30.2, body_age: 62, basal_metabolism: 2049, bmi: 34.5 },
+];
 
 export default function SettingsPage() {
   const profile = USER_PROFILE;
   const targets = NUTRITION_TARGETS;
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [stats, setStats] = useState<{ key: string; count: number; size: number }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function loadStats() {
+    if (typeof window === 'undefined') return;
+    const next: { key: string; count: number; size: number }[] = [];
+    for (const key of HEALTH_KEYS) {
+      const raw = localStorage.getItem(key);
+      let count = 0;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) count = parsed.length;
+          else if (parsed && typeof parsed === 'object') count = Object.keys(parsed).length;
+        } catch { count = 0; }
+      }
+      next.push({ key, count, size: raw ? new Blob([raw]).size : 0 });
+    }
+    setStats(next);
+  }
+
+  useEffect(() => { loadStats(); }, []);
+
+  function handleExport() {
+    if (typeof window === 'undefined') return;
+    const dump: Record<string, unknown> = {};
+    for (const key of HEALTH_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try { dump[key] = JSON.parse(raw); }
+        catch { dump[key] = raw; }
+      }
+    }
+    const payload = {
+      app: 'karada-rhythm',
+      version: 1,
+      exported_at: new Date().toISOString(),
+      data: dump,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const yyyymmdd = storage.toLocalDateString().replace(/-/g, '');
+    a.href = url;
+    a.download = `karada-rhythm-backup-${yyyymmdd}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setToast({ message: 'バックアップを書き出しました', type: 'success' });
+  }
+
+  function handleImportFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result || '');
+        const parsed = JSON.parse(text);
+        const data = (parsed && parsed.data) || parsed;
+        if (!data || typeof data !== 'object') throw new Error('format');
+        let restored = 0;
+        for (const key of HEALTH_KEYS) {
+          if (key in data) {
+            localStorage.setItem(key, JSON.stringify(data[key]));
+            restored++;
+          }
+        }
+        setToast({ message: `${restored} 個のデータセットを復元しました`, type: 'success' });
+        loadStats();
+      } catch {
+        setToast({ message: 'JSONの読み込みに失敗しました', type: 'error' });
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function handleRestoreScreenshots() {
+    if (!confirm('5/25・5/26・5/27 の体組成データを上書き登録します。よろしいですか？')) return;
+    SCREENSHOT_RESTORE_DATA.forEach(d => storage.saveBodyComposition(d));
+    setToast({ message: '3日分のデータを登録しました', type: 'success' });
+    loadStats();
+  }
+
+  function totalSize() {
+    return stats.reduce((s, x) => s + x.size, 0);
+  }
+  function totalCount() {
+    return stats.reduce((s, x) => s + x.count, 0);
+  }
 
   return (
     <div className="p-4">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">設定</h1>
       </header>
+
+      {/* データ管理 */}
+      <Card className="mb-4 bg-rose-50 border border-rose-200">
+        <h2 className="font-bold text-rose-900 mb-3 flex items-center gap-2">
+          <span>💾</span>
+          データ管理（バックアップ / 復元）
+        </h2>
+        <p className="text-xs text-rose-900/70 mb-3">
+          iOS Safari は localStorage を一定期間で自動削除することがあります。
+          定期的にバックアップを書き出して安全な場所（メール送信／iCloud Drive 等）に保管してください。
+        </p>
+
+        {/* 現状の保存量 */}
+        <div className="bg-white/70 rounded-xl p-3 mb-3">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-medium text-gray-800">保存中のデータ</span>
+            <span className="text-xs text-gray-500">
+              {totalCount()} 件 / {(totalSize() / 1024).toFixed(1)} KB
+            </span>
+          </div>
+          <div className="space-y-1 text-xs">
+            {stats.filter(s => s.count > 0).map(s => (
+              <div key={s.key} className="flex justify-between text-gray-600">
+                <span className="font-mono text-[10px]">{s.key.replace('health_', '')}</span>
+                <span>{s.count} 件 / {(s.size / 1024).toFixed(1)} KB</span>
+              </div>
+            ))}
+            {stats.every(s => s.count === 0) && (
+              <p className="text-rose-700 text-center py-2">⚠️ データが空です</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <button
+            type="button"
+            onClick={handleExport}
+            className="px-3 py-2 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700"
+          >
+            📤 書き出し
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="px-3 py-2 bg-white text-rose-700 border border-rose-300 rounded-lg text-sm font-medium hover:bg-rose-100"
+          >
+            📥 読み込み
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) handleImportFile(f);
+            e.target.value = '';
+          }}
+        />
+
+        <button
+          type="button"
+          onClick={handleRestoreScreenshots}
+          className="w-full px-3 py-2 bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-medium hover:bg-amber-200"
+        >
+          🆘 5/25・5/26・5/27 の体組成データを緊急復元
+        </button>
+        <p className="text-[10px] text-amber-700 mt-1 text-center">
+          ※ 過去のスクショから取得した値（体重・体脂肪・内臓脂肪・骨格筋・体年齢・基礎代謝・BMI）を上書きします
+        </p>
+      </Card>
+
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
 
       {/* プロファイル */}
       <Card className="mb-4">
