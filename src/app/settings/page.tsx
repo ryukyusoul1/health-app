@@ -5,7 +5,7 @@ import Card from '@/components/ui/Card';
 import Toast from '@/components/ui/Toast';
 import { USER_PROFILE, NUTRITION_TARGETS } from '@/lib/constants';
 import * as storage from '@/lib/storage';
-import * as cloud from '@/lib/cloud-backup';
+import * as drive from '@/lib/cloud-backup';
 import type { BodyComposition } from '@/types';
 
 // localStorage に保存されてる health-app 関連キー
@@ -42,49 +42,72 @@ export default function SettingsPage() {
   const [stats, setStats] = useState<{ key: string; count: number; size: number }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // クラウドバックアップ
-  const [deviceId, setDeviceId] = useState('');
-  const [emailInput, setEmailInput] = useState('');
+  // Google Drive バックアップ
+  const [driveEmail, setDriveEmail] = useState('');
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [restoreInput, setRestoreInput] = useState('');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [backupList, setBackupList] = useState<drive.DriveFile[]>([]);
+  const [showBackupList, setShowBackupList] = useState(false);
 
   useEffect(() => {
-    setDeviceId(cloud.getOrCreateDeviceId());
-    setEmailInput(cloud.getStoredEmail());
-    setLastSync(cloud.getLastSyncAt());
+    setDriveEmail(drive.getUserEmail());
+    setLastSync(drive.getLastSyncAt());
+    setIsLoggedIn(drive.isLoggedIn());
   }, []);
 
-  async function handleCloudSync() {
+  async function handleDriveLogin() {
+    try {
+      await drive.requestAccessToken('consent');
+      setIsLoggedIn(true);
+      setDriveEmail(drive.getUserEmail());
+      setToast({ message: 'Googleにログインしました', type: 'success' });
+    } catch (e) {
+      setToast({ message: 'ログイン失敗: ' + (e as Error).message, type: 'error' });
+    }
+  }
+
+  function handleDriveLogout() {
+    if (!confirm('Google連携を解除しますか？')) return;
+    drive.clearStoredToken();
+    setIsLoggedIn(false);
+    setDriveEmail('');
+    setToast({ message: 'ログアウトしました', type: 'success' });
+  }
+
+  async function handleDriveSync() {
     if (isSyncing) return;
     setIsSyncing(true);
-    // メールアドレスを先に保存
-    if (emailInput.trim()) cloud.setStoredEmail(emailInput.trim());
-    const result = await cloud.syncToCloud();
+    const result = await drive.syncToDrive(true);
     setIsSyncing(false);
     if (result.ok) {
-      setLastSync(cloud.getLastSyncAt());
-      setToast({ message: `サーバに保存しました（${((result.size || 0) / 1024).toFixed(1)} KB）`, type: 'success' });
+      setLastSync(drive.getLastSyncAt());
+      setIsLoggedIn(true);
+      setDriveEmail(drive.getUserEmail());
+      setToast({ message: `Google Drive に保存しました（${((result.size || 0) / 1024).toFixed(1)} KB）`, type: 'success' });
     } else {
       setToast({ message: `同期失敗: ${result.error}`, type: 'error' });
     }
   }
 
-  async function handleCloudRestore(by: 'email' | 'device_id') {
-    const key = restoreInput.trim();
-    if (!key) {
-      setToast({ message: by === 'email' ? 'メールアドレスを入力してください' : 'デバイスIDを入力してください', type: 'error' });
-      return;
-    }
-    if (!confirm(`サーバから ${by === 'email' ? 'メール' : 'デバイスID'} で復元します。現在のローカルデータは上書きされます。よろしいですか？`)) return;
-    const backup = await cloud.fetchFromCloud(by === 'email' ? { email: key } : { device_id: key });
-    if (!backup) {
+  async function handleLoadBackupList() {
+    const list = await drive.listDriveBackups();
+    setBackupList(list);
+    setShowBackupList(true);
+    if (list.length === 0) {
       setToast({ message: 'バックアップが見つかりませんでした', type: 'error' });
-      return;
     }
-    const n = cloud.applyCloudBackup(backup);
-    setToast({ message: `${n} 個のデータセットを復元しました（${backup.created_at} 時点）`, type: 'success' });
-    loadStats();
+  }
+
+  async function handleRestoreFile(fileId: string, name: string) {
+    if (!confirm(`「${name}」から復元します。現在のローカルデータは上書きされます。よろしいですか？`)) return;
+    const r = await drive.restoreFromDrive(fileId);
+    if (r.ok) {
+      setToast({ message: `${r.restored} 個のデータセットを復元しました`, type: 'success' });
+      loadStats();
+    } else {
+      setToast({ message: `復元失敗: ${r.error}`, type: 'error' });
+    }
   }
 
   function loadStats() {
@@ -180,81 +203,90 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-800">設定</h1>
       </header>
 
-      {/* クラウド自動バックアップ */}
+      {/* Google Drive 自動バックアップ */}
       <Card className="mb-4 bg-sky-50 border border-sky-200">
         <h2 className="font-bold text-sky-900 mb-3 flex items-center gap-2">
           <span>☁️</span>
-          自動クラウドバックアップ
+          Google Drive 自動バックアップ
         </h2>
         <p className="text-xs text-sky-900/70 mb-3">
-          アプリ起動時、前回から 30 日経過していたら自動で divID サーバ（core.div-id.jp）に
-          全データをバックアップ送信します。iOS が localStorage を消しても復元可能。
+          初回のみGoogleでログイン → 以降アプリ起動時、前回から30日経過していたら裏で自動で Google Drive の
+          <code className="mx-1 px-1 bg-white/60 rounded text-[10px]">karada-rhythm-backups</code>
+          フォルダにJSONを保存します。iOS が localStorage を消しても復元可能。
         </p>
 
         <div className="bg-white/70 rounded-xl p-3 mb-3 space-y-2">
+          <div className="flex justify-between text-xs items-center">
+            <span className="text-gray-600">連携状態</span>
+            <span className={`font-medium ${isLoggedIn ? 'text-emerald-700' : 'text-gray-500'}`}>
+              {isLoggedIn ? `✓ ${driveEmail || 'ログイン済'}` : '未ログイン'}
+            </span>
+          </div>
           <div className="flex justify-between text-xs">
             <span className="text-gray-600">最終同期</span>
             <span className="font-medium text-gray-800">
               {lastSync ? lastSync.toLocaleString('ja-JP') : '未同期'}
             </span>
           </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-gray-600">デバイスID</span>
-            <span className="font-mono text-[10px] text-gray-800 break-all">{deviceId}</span>
-          </div>
         </div>
 
-        <label className="block text-xs text-sky-900 font-medium mb-1">
-          復元用メールアドレス（任意・推奨）
-        </label>
-        <input
-          type="email"
-          value={emailInput}
-          onChange={e => setEmailInput(e.target.value)}
-          placeholder="you@example.com"
-          className="w-full px-3 py-2 mb-3 text-sm border border-sky-200 rounded-lg bg-white"
-        />
+        {!isLoggedIn ? (
+          <button
+            type="button"
+            onClick={handleDriveLogin}
+            className="w-full px-3 py-2 mb-2 bg-white text-gray-800 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center justify-center gap-2"
+          >
+            <span className="text-base">🔐</span>
+            Google でログインして連携
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleDriveSync}
+              disabled={isSyncing}
+              className="w-full px-3 py-2 mb-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 disabled:opacity-50"
+            >
+              {isSyncing ? '同期中...' : '☁️ 今すぐ Google Drive に保存'}
+            </button>
+            <button
+              type="button"
+              onClick={handleLoadBackupList}
+              className="w-full px-3 py-2 mb-2 bg-white text-sky-700 border border-sky-300 rounded-lg text-sm font-medium hover:bg-sky-100"
+            >
+              📂 Drive 上のバックアップ一覧
+            </button>
+            <button
+              type="button"
+              onClick={handleDriveLogout}
+              className="w-full px-3 py-1.5 mt-1 bg-transparent text-rose-700 text-xs hover:underline"
+            >
+              連携を解除
+            </button>
+          </>
+        )}
 
-        <button
-          type="button"
-          onClick={handleCloudSync}
-          disabled={isSyncing}
-          className="w-full px-3 py-2 mb-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 disabled:opacity-50"
-        >
-          {isSyncing ? '同期中...' : '☁️ 今すぐサーバに送信'}
-        </button>
-
-        <details className="mt-2">
-          <summary className="cursor-pointer text-xs text-sky-700 font-medium">サーバから復元する</summary>
-          <div className="mt-2 space-y-2">
-            <input
-              type="text"
-              value={restoreInput}
-              onChange={e => setRestoreInput(e.target.value)}
-              placeholder="メールアドレス または デバイスID"
-              className="w-full px-3 py-2 text-sm border border-sky-200 rounded-lg bg-white"
-            />
-            <div className="grid grid-cols-2 gap-2">
+        {showBackupList && backupList.length > 0 && (
+          <div className="mt-3 bg-white/70 rounded-xl p-3 space-y-1">
+            <p className="text-xs font-medium text-gray-700 mb-2">バックアップ一覧（タップで復元）</p>
+            {backupList.map(f => (
               <button
+                key={f.id}
                 type="button"
-                onClick={() => handleCloudRestore('email')}
-                className="px-3 py-2 bg-white text-sky-700 border border-sky-300 rounded-lg text-xs font-medium hover:bg-sky-100"
+                onClick={() => handleRestoreFile(f.id, f.name)}
+                className="w-full text-left p-2 bg-white rounded-lg border border-gray-200 hover:border-sky-400 hover:bg-sky-50"
               >
-                メールで復元
+                <div className="font-mono text-[11px] text-gray-800">{f.name}</div>
+                <div className="text-[10px] text-gray-500 mt-0.5">
+                  {new Date(f.modifiedTime).toLocaleString('ja-JP')} ・ {(f.size / 1024).toFixed(1)} KB
+                </div>
               </button>
-              <button
-                type="button"
-                onClick={() => handleCloudRestore('device_id')}
-                className="px-3 py-2 bg-white text-sky-700 border border-sky-300 rounded-lg text-xs font-medium hover:bg-sky-100"
-              >
-                デバイスIDで復元
-              </button>
-            </div>
+            ))}
           </div>
-        </details>
+        )}
 
         <p className="text-[10px] text-sky-700/60 mt-3 text-center">
-          ※ 同一デバイスの過去3件まで保持されます
+          ※ アプリが作成したファイルのみアクセス（drive.file スコープ）
         </p>
       </Card>
 
