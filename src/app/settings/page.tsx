@@ -5,6 +5,7 @@ import Card from '@/components/ui/Card';
 import Toast from '@/components/ui/Toast';
 import { USER_PROFILE, NUTRITION_TARGETS } from '@/lib/constants';
 import * as storage from '@/lib/storage';
+import * as cloud from '@/lib/cloud-backup';
 import type { BodyComposition } from '@/types';
 
 // localStorage に保存されてる health-app 関連キー
@@ -40,6 +41,51 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [stats, setStats] = useState<{ key: string; count: number; size: number }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // クラウドバックアップ
+  const [deviceId, setDeviceId] = useState('');
+  const [emailInput, setEmailInput] = useState('');
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [restoreInput, setRestoreInput] = useState('');
+
+  useEffect(() => {
+    setDeviceId(cloud.getOrCreateDeviceId());
+    setEmailInput(cloud.getStoredEmail());
+    setLastSync(cloud.getLastSyncAt());
+  }, []);
+
+  async function handleCloudSync() {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    // メールアドレスを先に保存
+    if (emailInput.trim()) cloud.setStoredEmail(emailInput.trim());
+    const result = await cloud.syncToCloud();
+    setIsSyncing(false);
+    if (result.ok) {
+      setLastSync(cloud.getLastSyncAt());
+      setToast({ message: `サーバに保存しました（${((result.size || 0) / 1024).toFixed(1)} KB）`, type: 'success' });
+    } else {
+      setToast({ message: `同期失敗: ${result.error}`, type: 'error' });
+    }
+  }
+
+  async function handleCloudRestore(by: 'email' | 'device_id') {
+    const key = restoreInput.trim();
+    if (!key) {
+      setToast({ message: by === 'email' ? 'メールアドレスを入力してください' : 'デバイスIDを入力してください', type: 'error' });
+      return;
+    }
+    if (!confirm(`サーバから ${by === 'email' ? 'メール' : 'デバイスID'} で復元します。現在のローカルデータは上書きされます。よろしいですか？`)) return;
+    const backup = await cloud.fetchFromCloud(by === 'email' ? { email: key } : { device_id: key });
+    if (!backup) {
+      setToast({ message: 'バックアップが見つかりませんでした', type: 'error' });
+      return;
+    }
+    const n = cloud.applyCloudBackup(backup);
+    setToast({ message: `${n} 個のデータセットを復元しました（${backup.created_at} 時点）`, type: 'success' });
+    loadStats();
+  }
 
   function loadStats() {
     if (typeof window === 'undefined') return;
@@ -134,15 +180,92 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-800">設定</h1>
       </header>
 
-      {/* データ管理 */}
+      {/* クラウド自動バックアップ */}
+      <Card className="mb-4 bg-sky-50 border border-sky-200">
+        <h2 className="font-bold text-sky-900 mb-3 flex items-center gap-2">
+          <span>☁️</span>
+          自動クラウドバックアップ
+        </h2>
+        <p className="text-xs text-sky-900/70 mb-3">
+          アプリ起動時、前回から 30 日経過していたら自動で divID サーバ（core.div-id.jp）に
+          全データをバックアップ送信します。iOS が localStorage を消しても復元可能。
+        </p>
+
+        <div className="bg-white/70 rounded-xl p-3 mb-3 space-y-2">
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-600">最終同期</span>
+            <span className="font-medium text-gray-800">
+              {lastSync ? lastSync.toLocaleString('ja-JP') : '未同期'}
+            </span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-600">デバイスID</span>
+            <span className="font-mono text-[10px] text-gray-800 break-all">{deviceId}</span>
+          </div>
+        </div>
+
+        <label className="block text-xs text-sky-900 font-medium mb-1">
+          復元用メールアドレス（任意・推奨）
+        </label>
+        <input
+          type="email"
+          value={emailInput}
+          onChange={e => setEmailInput(e.target.value)}
+          placeholder="you@example.com"
+          className="w-full px-3 py-2 mb-3 text-sm border border-sky-200 rounded-lg bg-white"
+        />
+
+        <button
+          type="button"
+          onClick={handleCloudSync}
+          disabled={isSyncing}
+          className="w-full px-3 py-2 mb-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 disabled:opacity-50"
+        >
+          {isSyncing ? '同期中...' : '☁️ 今すぐサーバに送信'}
+        </button>
+
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-sky-700 font-medium">サーバから復元する</summary>
+          <div className="mt-2 space-y-2">
+            <input
+              type="text"
+              value={restoreInput}
+              onChange={e => setRestoreInput(e.target.value)}
+              placeholder="メールアドレス または デバイスID"
+              className="w-full px-3 py-2 text-sm border border-sky-200 rounded-lg bg-white"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleCloudRestore('email')}
+                className="px-3 py-2 bg-white text-sky-700 border border-sky-300 rounded-lg text-xs font-medium hover:bg-sky-100"
+              >
+                メールで復元
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCloudRestore('device_id')}
+                className="px-3 py-2 bg-white text-sky-700 border border-sky-300 rounded-lg text-xs font-medium hover:bg-sky-100"
+              >
+                デバイスIDで復元
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <p className="text-[10px] text-sky-700/60 mt-3 text-center">
+          ※ 同一デバイスの過去3件まで保持されます
+        </p>
+      </Card>
+
+      {/* データ管理（手動エクスポート/インポート） */}
       <Card className="mb-4 bg-rose-50 border border-rose-200">
         <h2 className="font-bold text-rose-900 mb-3 flex items-center gap-2">
           <span>💾</span>
-          データ管理（バックアップ / 復元）
+          手動バックアップ（JSON書き出し / 読み込み）
         </h2>
         <p className="text-xs text-rose-900/70 mb-3">
-          iOS Safari は localStorage を一定期間で自動削除することがあります。
-          定期的にバックアップを書き出して安全な場所（メール送信／iCloud Drive 等）に保管してください。
+          自動同期と別に、手動で JSON ファイルとして書き出し・読み込みもできます。
         </p>
 
         {/* 現状の保存量 */}

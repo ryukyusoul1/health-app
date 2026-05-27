@@ -8,6 +8,7 @@ import { CONDITION_EMOJIS, WEEKDAYS } from '@/lib/constants';
 import { BloodPressure, BodyComposition, DailyNutritionSummary, ConditionLog, Recipe } from '@/types';
 import Link from 'next/link';
 import * as storage from '@/lib/storage';
+import { autoBackupIfNeeded } from '@/lib/cloud-backup';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
@@ -31,6 +32,8 @@ export default function Home() {
       storage.initializeData();
     }
     loadData();
+    // 30日以上バックアップしてなければ裏で自動同期（失敗しても無視）
+    autoBackupIfNeeded().catch(() => {});
   }, []);
 
   function loadData() {
