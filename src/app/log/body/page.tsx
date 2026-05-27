@@ -130,26 +130,116 @@ export default function BodyCompositionPage() {
     setShowCalendar(false);
   }
 
-  // グラフデータ
+  // 単純線形回帰: { slope: 1日あたりの変化量, intercept }
+  function linearTrend(points: { x: number; y: number }[]): { slope: number; intercept: number } | null {
+    if (points.length < 2) return null;
+    const n = points.length;
+    const sumX = points.reduce((s, p) => s + p.x, 0);
+    const sumY = points.reduce((s, p) => s + p.y, 0);
+    const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+    const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+    const denom = n * sumX2 - sumX * sumX;
+    if (denom === 0) return null;
+    const slope = (n * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / n;
+    return { slope, intercept };
+  }
+
+  // 5日ごとの予測点数（30日先まで）
+  const PREDICT_INTERVAL = 5;
+  const PREDICT_STEPS = 6;
+
+  // グラフデータ（実データ + 5日ごとの予測点）
   const graphData = useMemo(() => {
     const now = new Date();
     const periodDays = { '1m': 30, '3m': 90, '6m': 180, '1y': 365 }[graphPeriod];
     const startDate = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
 
-    return records
+    const inPeriod = records
       .filter(r => new Date(r.measured_date) >= startDate)
-      .sort((a, b) => new Date(a.measured_date).getTime() - new Date(b.measured_date).getTime())
-      .map(r => ({
-        date: r.measured_date.slice(5),
-        weight_kg: r.weight_kg,
-        body_fat_pct: r.body_fat_pct,
-        visceral_fat_level: r.visceral_fat_level,
-        skeletal_muscle_pct: r.skeletal_muscle_pct,
-        body_age: r.body_age,
-        basal_metabolism: r.basal_metabolism,
-        bmi: r.bmi,
-      }));
+      .sort((a, b) => new Date(a.measured_date).getTime() - new Date(b.measured_date).getTime());
+
+    type Row = {
+      date: string;
+      weight_kg?: number | null; body_fat_pct?: number | null; visceral_fat_level?: number | null;
+      skeletal_muscle_pct?: number | null; body_age?: number | null; basal_metabolism?: number | null; bmi?: number | null;
+      weight_kg_pred?: number | null; body_fat_pct_pred?: number | null; visceral_fat_level_pred?: number | null;
+      skeletal_muscle_pct_pred?: number | null; body_age_pred?: number | null; basal_metabolism_pred?: number | null; bmi_pred?: number | null;
+    };
+
+    const actual: Row[] = inPeriod.map(r => ({
+      date: r.measured_date.slice(5),
+      weight_kg: r.weight_kg,
+      body_fat_pct: r.body_fat_pct,
+      visceral_fat_level: r.visceral_fat_level,
+      skeletal_muscle_pct: r.skeletal_muscle_pct,
+      body_age: r.body_age,
+      basal_metabolism: r.basal_metabolism,
+      bmi: r.bmi,
+    }));
+
+    if (inPeriod.length < 2) return actual;
+
+    // 期間内データから各指標のトレンドを計算
+    const baseTime = new Date(inPeriod[0].measured_date).getTime();
+    const dayIdx = (dateStr: string) => Math.round((new Date(dateStr).getTime() - baseTime) / 86400000);
+    const lastDayIdx = dayIdx(inPeriod[inPeriod.length - 1].measured_date);
+
+    const metrics: GraphMetric[] = ['weight_kg', 'body_fat_pct', 'visceral_fat_level', 'skeletal_muscle_pct', 'body_age', 'basal_metabolism', 'bmi'];
+    const trends: Partial<Record<GraphMetric, { slope: number; intercept: number }>> = {};
+    metrics.forEach(m => {
+      const pts: { x: number; y: number }[] = [];
+      inPeriod.forEach(r => {
+        const v = r[m];
+        if (v != null) pts.push({ x: dayIdx(r.measured_date), y: v });
+      });
+      const t = linearTrend(pts);
+      if (t) trends[m] = t;
+    });
+
+    // 最後の実データに予測ラインの始点をくっつける（連続表示）
+    const lastActual = actual[actual.length - 1];
+    metrics.forEach(m => {
+      const v = lastActual[m];
+      if (v != null) (lastActual as Row)[`${m}_pred` as keyof Row] = v as never;
+    });
+
+    // 5日ごとの予測点を生成
+    const lastDate = new Date(inPeriod[inPeriod.length - 1].measured_date);
+    const future: Row[] = [];
+    for (let i = 1; i <= PREDICT_STEPS; i++) {
+      const d = new Date(lastDate.getTime() + i * PREDICT_INTERVAL * 86400000);
+      const row: Row = { date: d.toISOString().slice(5, 10) };
+      metrics.forEach(m => {
+        const t = trends[m];
+        if (t) {
+          const x = lastDayIdx + i * PREDICT_INTERVAL;
+          (row as Row)[`${m}_pred` as keyof Row] = (t.intercept + t.slope * x) as never;
+        }
+      });
+      future.push(row);
+    }
+
+    return [...actual, ...future];
   }, [records, graphPeriod]);
+
+  // 予測サマリー（選択中メトリクスの 5/10/.../30日後の値）
+  const predictionSummary = useMemo(() => {
+    if (graphData.length < 2) return null;
+    const futurePoints = graphData.slice(-PREDICT_STEPS);
+    if (futurePoints.length === 0) return null;
+    return selectedMetrics.map(m => {
+      const points = futurePoints.map((p, i) => {
+        const raw = (p as unknown as Record<string, unknown>)[`${m}_pred`];
+        const value = typeof raw === 'number' ? raw : null;
+        return { days: (i + 1) * PREDICT_INTERVAL, value };
+      });
+      const latestActual = records[0]?.[m];
+      const finalPredicted = points[points.length - 1].value;
+      const totalChange = (latestActual != null && finalPredicted != null) ? (finalPredicted - latestActual) : null;
+      return { metric: m, points, latestActual, totalChange };
+    });
+  }, [graphData, selectedMetrics, records]);
 
   function toggleMetric(m: GraphMetric) {
     setSelectedMetrics(prev =>
@@ -467,6 +557,17 @@ export default function BodyCompositionPage() {
                           dot={{ r: 4 }}
                           connectNulls
                         />
+                        <Line
+                          type="monotone"
+                          dataKey={`${m}_pred`}
+                          name={`${METRIC_LABELS[m]}（予測）`}
+                          stroke={METRIC_COLORS[m]}
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          strokeOpacity={0.6}
+                          dot={{ r: 3, strokeWidth: 1, fill: '#fff' }}
+                          connectNulls
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -476,7 +577,56 @@ export default function BodyCompositionPage() {
           )}
           {graphData.length >= 2 && (
             <Card className="mb-4">
-              <p className="text-gray-400 text-xs text-center">※ 各指標を個別のスケールで表示しています</p>
+              <p className="text-gray-400 text-xs text-center">
+                ※ 実線＝実データ、点線＝今のペースで進んだ場合の予測（5日ごと、30日先まで）
+              </p>
+            </Card>
+          )}
+
+          {/* 5日ごと予測サマリー */}
+          {predictionSummary && predictionSummary.some(p => p.points.some(pt => pt.value != null)) && (
+            <Card className="mb-4 bg-gradient-to-br from-rose-50 to-pink-50 border border-rose-200">
+              <h3 className="font-bold text-rose-900 mb-3 flex items-center gap-2">
+                <span>🔮</span>
+                <span>このペースだと…（5日ごとの予測）</span>
+              </h3>
+              <div className="space-y-3">
+                {predictionSummary.map(({ metric, points, latestActual, totalChange }) => {
+                  const validPoints = points.filter(p => p.value != null);
+                  if (validPoints.length === 0) return null;
+                  return (
+                    <div key={metric} className="bg-white/60 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-bold" style={{ color: METRIC_COLORS[metric] }}>
+                          {METRIC_LABELS[metric]}
+                        </span>
+                        {latestActual != null && totalChange != null && (
+                          <span className={`text-xs font-bold ${totalChange < 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            30日後: {totalChange > 0 ? '+' : ''}{totalChange.toFixed(metric === 'body_age' || metric === 'visceral_fat_level' || metric === 'basal_metabolism' ? 0 : 2)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-6 gap-1 text-center">
+                        {points.map((p, i) => (
+                          <div key={i} className="text-[10px]">
+                            <div className="text-gray-500">+{p.days}日</div>
+                            <div className="font-bold text-gray-800">
+                              {p.value != null
+                                ? (metric === 'body_age' || metric === 'visceral_fat_level' || metric === 'basal_metabolism'
+                                    ? Math.round(p.value)
+                                    : p.value.toFixed(1))
+                                : '—'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-rose-700/70 mt-3 text-center">
+                ※ 表示中の期間（{graphPeriod === '1m' ? '1ヶ月' : graphPeriod === '3m' ? '3ヶ月' : graphPeriod === '6m' ? '6ヶ月' : '1年'}）の傾向から線形回帰で算出
+              </p>
             </Card>
           )}
           {/* 最新値サマリー */}
